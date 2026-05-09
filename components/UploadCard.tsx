@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, FileUp, Loader2, ArrowRight } from "lucide-react";
-import { motion } from "framer-motion";
+import { Upload, FileUp, Loader2, ArrowRight, Tag as TagIcon, ChevronDown } from "lucide-react";
 
 type Sample = {
   id: string;
@@ -71,41 +70,38 @@ export default function UploadCard() {
   );
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-6 py-12">
-      <div className="text-center">
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-white/60"
-        >
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-fuchsia-400" />
-          Live demo · powered by codex
-        </motion.div>
-        <motion.h1
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="bg-gradient-to-br from-white via-fuchsia-100 to-violet-200 bg-clip-text text-5xl font-bold tracking-tight text-transparent md:text-6xl"
-        >
-          Read with a brain on your shoulder.
-        </motion.h1>
-        <motion.p
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="mx-auto mt-4 max-w-2xl text-base text-white/60 md:text-lg"
-        >
-          Drop in any well-tagged PDF. Braynr&apos;s agent reads it, picks the
-          concepts that benefit from a picture, and renders them — 3D models,
-          animated simulations, formulas, graphs, or live source citations —
-          right next to the text.
-        </motion.p>
+    <div className="mx-auto w-full max-w-4xl px-10 py-14">
+      {/* Header row — chips above the title, just like the mockup */}
+      <div className="mb-5 flex items-center gap-2">
+        <button type="button" className="chip-soft">
+          <FileUp className="h-3 w-3" />
+          Note
+          <ChevronDown className="h-3 w-3 opacity-60" />
+        </button>
+        <button type="button" className="chip-plain">
+          <FileUp className="h-3 w-3" />
+          Collections
+        </button>
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
+      <h1 className="text-balance text-[44px] font-bold leading-[1.08] tracking-tight text-[var(--ink-900)]">
+        Read with a brain on your shoulder.
+      </h1>
+
+      <div className="mt-3 flex items-center gap-2 text-[13px] text-[var(--ink-400)]">
+        <TagIcon className="h-3.5 w-3.5" />
+        <span>Tags</span>
+      </div>
+
+      <p className="mt-7 max-w-2xl text-[15px] leading-[1.65] text-[var(--ink-700)]">
+        Drop in any well-tagged PDF. Braynr&apos;s agent reads it, picks the
+        concepts that benefit from a picture, and renders them — 3D models,
+        animated simulations, formulas, graphs, or live source citations —
+        right next to the text.
+      </p>
+
+      {/* Drop zone */}
+      <div
         onDragEnter={(e) => {
           e.preventDefault();
           setDragOver(true);
@@ -119,10 +115,10 @@ export default function UploadCard() {
           if (f) startUpload(f);
         }}
         className={[
-          "mt-10 cursor-pointer rounded-2xl border-2 border-dashed bg-white/[0.02] px-8 py-10 text-center transition-colors",
+          "mt-9 cursor-pointer rounded-2xl border bg-white px-8 py-10 text-center transition-colors",
           dragOver
-            ? "border-fuchsia-400/70 bg-fuchsia-400/10"
-            : "border-white/10 hover:border-white/20",
+            ? "border-[var(--accent-500)] bg-[var(--accent-50)]"
+            : "border-dashed border-[var(--border-default)] hover:border-[var(--border-strong)]",
         ].join(" ")}
         onClick={() => inputRef.current?.click()}
         role="button"
@@ -138,59 +134,58 @@ export default function UploadCard() {
             if (f) startUpload(f);
           }}
         />
-        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500/30 to-violet-500/30 ring-1 ring-fuchsia-300/30">
+        <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--accent-50)] ring-1 ring-[var(--accent-100)]">
           {busy === "upload" ? (
-            <Loader2 className="h-5 w-5 animate-spin text-white" />
+            <Loader2 className="h-5 w-5 animate-spin text-[var(--accent-600)]" />
           ) : (
-            <Upload className="h-5 w-5 text-white" />
+            <Upload className="h-5 w-5 text-[var(--accent-600)]" />
           )}
         </div>
-        <p className="text-sm font-medium text-white">
+        <p className="text-[14px] font-medium text-[var(--ink-900)]">
           {busy === "upload" ? "Uploading and parsing…" : "Drop a PDF here, or click to browse"}
         </p>
-        <p className="mt-1 text-xs text-white/40">
+        <p className="mt-1 text-[12px] text-[var(--ink-400)]">
           Best with text-tagged PDFs. We don&apos;t OCR images.
         </p>
-      </motion.div>
+      </div>
 
+      {/* Sample documents — Reflect-grade list cards */}
       <div className="mt-12">
-        <p className="mb-4 text-center text-[11px] uppercase tracking-[0.2em] text-white/40">
-          Or try one of our sample documents
+        <p className="mb-4 text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--ink-400)]">
+          Sample documents
         </p>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {samples.map((s, i) => (
-            <motion.button
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {samples.map((s) => (
+            <button
               key={s.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 + i * 0.05 }}
               onClick={() => startSample(s.id)}
               disabled={busy != null}
-              className="group relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-white/[0.03] to-white/[0.01] p-5 text-left transition hover:border-white/20 hover:bg-white/[0.04] disabled:opacity-50"
+              className="group flex items-start gap-4 rounded-xl border border-[var(--border-subtle)] bg-white p-4 text-left transition hover:border-[var(--border-strong)] disabled:opacity-50"
             >
-              <div className={`absolute -right-12 -top-12 h-32 w-32 rounded-full bg-gradient-to-br ${s.color} opacity-30 blur-2xl`} />
-              <div className="relative">
-                <div className={`mb-3 inline-flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br ${s.color} shadow`}>
-                  <FileUp className="h-4 w-4 text-white" />
-                </div>
-                <p className="text-sm font-semibold text-white">{s.title}</p>
-                <p className="mt-1 line-clamp-2 text-xs text-white/55">{s.description}</p>
-                <div className="mt-3 flex items-center justify-between text-[11px] text-white/40">
-                  <span>{s.sizeKb} KB</span>
-                  {busy === s.id ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-1" />
-                  )}
-                </div>
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-sunken)]">
+                <FileUp className="h-4 w-4 text-[var(--ink-700)]" />
               </div>
-            </motion.button>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[14px] font-semibold text-[var(--ink-900)]">{s.title}</p>
+                <p className="mt-0.5 line-clamp-2 text-[12.5px] leading-relaxed text-[var(--ink-500)]">
+                  {s.description}
+                </p>
+                <div className="mt-2 text-[11px] tabular-nums text-[var(--ink-400)]">{s.sizeKb} KB</div>
+              </div>
+              <div className="self-center text-[var(--ink-400)] transition group-hover:translate-x-0.5 group-hover:text-[var(--ink-900)]">
+                {busy === s.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-[var(--accent-600)]" />
+                ) : (
+                  <ArrowRight className="h-4 w-4" />
+                )}
+              </div>
+            </button>
           ))}
         </div>
       </div>
 
       {error && (
-        <p className="mt-6 text-center text-sm text-rose-300">{error}</p>
+        <p className="mt-6 text-center text-sm text-rose-600">{error}</p>
       )}
     </div>
   );

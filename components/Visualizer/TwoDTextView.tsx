@@ -8,30 +8,30 @@ type Props = { spec: TwoDTextSpec };
 
 export default function TwoDTextView({ spec }: Props) {
   return (
-    <div className="h-full w-full overflow-auto px-6 py-5 text-slate-200">
-      <article className="prose prose-invert prose-sm max-w-none prose-headings:text-white prose-strong:text-white prose-a:text-sky-300">
+    <div className="h-full w-full overflow-auto bg-white px-7 py-6 text-[var(--ink-700)]">
+      <article className="prose prose-sm max-w-none prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-[var(--ink-900)] prose-p:leading-relaxed prose-p:text-[var(--ink-700)] prose-strong:text-[var(--ink-900)] prose-a:text-[var(--accent-600)] prose-a:no-underline hover:prose-a:underline prose-li:text-[var(--ink-700)] prose-code:rounded prose-code:bg-[var(--surface-sunken)] prose-code:px-1 prose-code:py-0.5 prose-code:text-[var(--ink-900)] prose-code:before:content-none prose-code:after:content-none">
         <ReactMarkdown>{spec.body_markdown}</ReactMarkdown>
       </article>
       {spec.citations.length > 0 && (
-        <div className="mt-6 border-t border-white/10 pt-4">
-          <p className="mb-2 text-[10px] uppercase tracking-wider text-white/40">
+        <div className="mt-8 border-t border-[var(--border-subtle)] pt-5">
+          <p className="mb-3 text-[10px] uppercase tracking-[0.18em] text-[var(--ink-400)]">
             Sources
           </p>
-          <ul className="space-y-2 text-xs">
+          <ul className="space-y-3 text-[13px]">
             {spec.citations.map((c, i) => (
-              <li key={i} className="flex items-start gap-2">
-                <span className="mt-0.5 inline-block h-5 w-5 shrink-0 rounded bg-white/10 text-center text-[10px] leading-5 text-white/60">
+              <li key={i} className="flex items-start gap-2.5">
+                <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[var(--surface-sunken)] text-[10px] font-medium text-[var(--ink-700)]">
                   {i + 1}
                 </span>
                 <div className="min-w-0">
-                  <p className="text-slate-200">{c.label}</p>
-                  <p className="text-slate-400">{c.source}</p>
+                  <p className="text-[var(--ink-900)]">{c.label}</p>
+                  <p className="text-[var(--ink-500)]">{c.source}</p>
                   {c.url && (
                     <a
                       href={c.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-0.5 inline-flex items-center gap-1 text-sky-300 hover:text-sky-200"
+                      className="mt-0.5 inline-flex items-center gap-1 text-[var(--accent-600)] hover:text-[var(--accent-700)]"
                     >
                       {new URL(c.url).hostname}
                       <ExternalLink className="h-3 w-3" />

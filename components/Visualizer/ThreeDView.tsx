@@ -22,7 +22,7 @@ export default function ThreeDView({ spec }: Props) {
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(width, height);
-    renderer.setClearColor("#0b1020", 1);
+    renderer.setClearColor("#ffffff", 1);
     mount.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
@@ -173,11 +173,11 @@ export default function ThreeDView({ spec }: Props) {
     <div className="relative h-full w-full">
       <div ref={mountRef} className="h-full w-full cursor-grab active:cursor-grabbing" />
       {error && (
-        <div className="absolute bottom-3 left-3 right-3 rounded-md bg-rose-950/80 px-3 py-2 text-xs text-rose-200">
+        <div className="absolute bottom-3 left-3 right-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
           {error}
         </div>
       )}
-      <div className="pointer-events-none absolute right-3 top-3 rounded-full bg-white/5 px-2.5 py-1 text-[10px] uppercase tracking-wider text-white/50 backdrop-blur">
+      <div className="pointer-events-none absolute right-3 top-3 rounded-md border border-[var(--border-subtle)] bg-white/85 px-2.5 py-1 text-[10px] uppercase tracking-wider text-[var(--ink-500)] backdrop-blur">
         drag · scroll
       </div>
     </div>

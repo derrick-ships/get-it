@@ -27,31 +27,31 @@ type Props = { spec: FormulaSpec };
 
 export default function FormulaView({ spec }: Props) {
   return (
-    <div className="h-full w-full overflow-auto px-6 py-6 text-slate-200">
-      <div className="rounded-xl bg-gradient-to-br from-violet-500/10 via-indigo-500/5 to-transparent p-6">
-        <p className="mb-3 text-[10px] uppercase tracking-wider text-violet-300/80">
+    <div className="h-full w-full overflow-auto bg-white px-7 py-6 text-[var(--ink-900)]">
+      <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-sunken)] p-6">
+        <p className="mb-3 text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--ink-400)]">
           Headline
         </p>
-        <div className="text-2xl text-white">
+        <div className="text-2xl text-[var(--ink-900)]">
           <Tex tex={spec.main_latex} />
         </div>
       </div>
-      <p className="mt-5 mb-2 text-[10px] uppercase tracking-wider text-white/40">
+      <p className="mt-7 mb-3 text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--ink-400)]">
         Step-by-step derivation
       </p>
       <ol className="space-y-3">
         {spec.steps.map((s, i) => (
           <li
             key={i}
-            className="rounded-lg border border-white/5 bg-white/[0.03] p-4"
+            className="rounded-xl border border-[var(--border-subtle)] bg-white p-4"
           >
             <div className="mb-2 flex items-center gap-2">
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-violet-500/20 text-[10px] text-violet-200">
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[var(--surface-sunken)] text-[10px] font-medium text-[var(--ink-700)]">
                 {i + 1}
               </span>
-              <p className="text-xs text-slate-400">{s.explanation}</p>
+              <p className="text-[12.5px] text-[var(--ink-500)]">{s.explanation}</p>
             </div>
-            <div className="text-base text-white">
+            <div className="text-[15px] text-[var(--ink-900)]">
               <Tex tex={s.latex} />
             </div>
           </li>

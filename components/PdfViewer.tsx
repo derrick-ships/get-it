@@ -19,12 +19,13 @@ const TYPE_ICON: Record<VizType, React.ComponentType<{ className?: string }>> = 
   graph: BarChart3,
 };
 
-const TYPE_COLORS: Record<VizType, string> = {
-  "3d": "from-rose-500 to-fuchsia-600",
-  "2d-anim": "from-amber-400 to-orange-500",
-  "2d-text": "from-emerald-400 to-teal-500",
-  formula: "from-violet-400 to-indigo-500",
-  graph: "from-sky-400 to-cyan-500",
+// CSS-variable token sets for each tag type (resolved in globals.css).
+const TYPE_VARS: Record<VizType, { bg: string; fg: string; ring: string }> = {
+  "3d":      { bg: "var(--tag-rose-bg)",    fg: "var(--tag-rose-fg)",    ring: "var(--tag-rose-ring)" },
+  "2d-anim": { bg: "var(--tag-amber-bg)",   fg: "var(--tag-amber-fg)",   ring: "var(--tag-amber-ring)" },
+  "2d-text": { bg: "var(--tag-emerald-bg)", fg: "var(--tag-emerald-fg)", ring: "var(--tag-emerald-ring)" },
+  formula:   { bg: "var(--tag-violet-bg)",  fg: "var(--tag-violet-fg)",  ring: "var(--tag-violet-ring)" },
+  graph:     { bg: "var(--tag-sky-bg)",     fg: "var(--tag-sky-fg)",     ring: "var(--tag-sky-ring)" },
 };
 
 export type Tag = {
@@ -108,14 +109,14 @@ export default function PdfViewer({
   }, [activeTagId, tags]);
 
   return (
-    <div ref={scrollRef} className="relative flex h-full flex-col overflow-y-auto bg-slate-100">
+    <div ref={scrollRef} className="relative flex h-full flex-col overflow-y-auto bg-white">
       {detecting && (
-        <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-slate-200/70 bg-white/80 px-4 py-2 text-xs text-slate-600 backdrop-blur">
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-fuchsia-500" />
+        <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-[var(--border-subtle)] bg-white/90 px-4 py-2 text-[12px] text-[var(--ink-500)] backdrop-blur">
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--accent-600)]" />
           codex is reading your document and tagging concepts…
         </div>
       )}
-      <div className="flex flex-col items-center gap-6 px-6 py-6">
+      <div className="flex flex-col items-center gap-7 px-6 py-8">
         {Array.from({ length: numPages }).map((_, i) => (
           <PdfPage
             key={i}
@@ -194,13 +195,13 @@ function PdfPage({
   return (
     <div
       data-page={pageNumber - 1}
-      className="relative shrink-0 rounded-lg bg-white shadow-[0_2px_30px_rgba(15,23,42,0.18)] ring-1 ring-slate-200/70"
+      className="relative shrink-0 overflow-hidden bg-white"
       style={{
         width: pdfWidth * scale,
         height: pdfHeight * scale,
       }}
     >
-      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full rounded-lg" />
+      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
       {/* Tag overlay layer */}
       <div className="pointer-events-none absolute inset-0">
         {tags.map((t) => {
@@ -208,23 +209,27 @@ function PdfPage({
           const left = t.endX * scale + 4;
           const top = (pdfHeight - t.endY - t.fontHeight * 0.85) * scale - 1;
           const isActive = activeTagId === t.id;
-          // Three states: ready (clickable, colored), generating (disabled,
-          // spinner), idle (clickable in manual mode — colored but lighter).
+          const tokens = TYPE_VARS[t.type];
+          // Three states:
+          //   ready      → clickable, full pastel pill
+          //   generating → disabled spinner
+          //   idle       → clickable in manual mode, softer pastel
           const isIdle = !t.ready && !t.generating;
           const clickable = t.ready || isIdle;
-          let baseClass: string;
-          let title: string;
-          if (t.ready) {
-            baseClass = `bg-gradient-to-br ${TYPE_COLORS[t.type]} text-white ring-white/40 hover:scale-105 hover:shadow-lg cursor-pointer`;
-            title = t.label;
-          } else if (t.generating) {
-            baseClass = "cursor-wait bg-slate-200 text-slate-500 ring-slate-300";
-            title = "preparing visualization…";
-          } else {
-            // Idle / manual mode — clickable but visually softer.
-            baseClass = `bg-gradient-to-br ${TYPE_COLORS[t.type]} text-white/90 ring-white/30 opacity-75 hover:opacity-100 hover:scale-105 hover:shadow-lg cursor-pointer`;
-            title = `Click to generate visualization for "${t.label}"`;
-          }
+          const colorTokens =
+            t.ready || isIdle
+              ? ({
+                  ["--bg" as string]: tokens.bg,
+                  ["--fg" as string]: tokens.fg,
+                  ["--ring" as string]: tokens.ring,
+                } as React.CSSProperties)
+              : {};
+          const title = t.ready
+            ? t.label
+            : t.generating
+              ? "preparing visualization…"
+              : `Click to generate visualization for "${t.label}"`;
+          const stateAttr = t.ready ? "ready" : t.generating ? "generating" : "idle";
           return (
             <motion.button
               key={t.id}
@@ -234,14 +239,10 @@ function PdfPage({
               type="button"
               disabled={!clickable}
               onClick={() => onTagClick(t.id)}
-              style={{ left, top }}
-              className={[
-                "pointer-events-auto absolute -translate-y-0.5 inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium leading-none shadow-md ring-1 transition-all",
-                baseClass,
-                isActive && "scale-110 ring-2 ring-white opacity-100",
-              ]
-                .filter(Boolean)
-                .join(" ")}
+              data-active={isActive ? "true" : "false"}
+              data-state={stateAttr}
+              style={{ left, top, ...colorTokens }}
+              className="tag-pill pointer-events-auto absolute -translate-y-0.5"
               title={title}
             >
               {t.generating ? (
@@ -254,7 +255,7 @@ function PdfPage({
           );
         })}
       </div>
-      <div className="pointer-events-none absolute -bottom-5 right-2 text-[10px] text-slate-400">
+      <div className="pointer-events-none absolute -bottom-5 right-2 text-[10px] tabular-nums text-[var(--ink-400)]">
         page {pageNumber}
       </div>
     </div>

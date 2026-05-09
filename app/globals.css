@@ -1,9 +1,46 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/* ───────────────────────────────────────────────────────────────
+   Braynr design system — clean, white-on-white, Reflect-grade.
+   No gradients, no paper grain, no warm casts. Pure ink-on-paper.
+   ─────────────────────────────────────────────────────────────── */
+
 :root {
-  --background: #04060f;
-  --foreground: #e2e8f0;
+  /* Surfaces */
+  --surface-canvas: #f6f5f2;       /* outer chrome (top bar strip) */
+  --surface-raised: #ffffff;       /* main content + cards */
+  --surface-sunken: #f3f2ef;       /* hovers, gentle wells */
+  --surface-overlay: rgba(255, 255, 255, 0.85);
+
+  /* Borders */
+  --border-subtle: #ececea;
+  --border-default: #e3e2df;
+  --border-strong: #cdccc8;
+
+  /* Ink (text) */
+  --ink-900: #111113;
+  --ink-700: #2a2a2d;
+  --ink-500: #6a6a6e;
+  --ink-400: #8c8c90;
+  --ink-300: #b6b6ba;
+
+  /* Single accent — calm indigo (the only saturated color in the chrome) */
+  --accent-50:  #eef0ff;
+  --accent-100: #dfe3ff;
+  --accent-500: #4f5ae0;
+  --accent-600: #4048cf;
+  --accent-700: #333aa6;
+
+  /* Tag swatches — soft pastel pills (used only on PDF tags + concept dots) */
+  --tag-rose-bg: #fde8ec;     --tag-rose-fg: #9f1f3a;     --tag-rose-ring: #f5cdd5;
+  --tag-amber-bg: #fdedd2;    --tag-amber-fg: #92580a;    --tag-amber-ring: #f4d6a3;
+  --tag-emerald-bg: #d9efe2;  --tag-emerald-fg: #0f6a47;  --tag-emerald-ring: #b7dec8;
+  --tag-violet-bg: #eae4fb;   --tag-violet-fg: #4b2db4;   --tag-violet-ring: #cfc4f1;
+  --tag-sky-bg: #d9e9f9;      --tag-sky-fg: #1c4f87;      --tag-sky-ring: #b6d3ee;
+
+  --background: var(--surface-canvas);
+  --foreground: var(--ink-900);
 }
 
 @theme inline {
@@ -15,23 +52,139 @@
 
 html,
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--surface-canvas);
+  color: var(--ink-900);
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* nicer scrollbars on dark */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
+/* Scrollbars — neutral, almost invisible */
+::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(17, 17, 19, 0.10);
   border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.14);
+::-webkit-scrollbar-thumb:hover { background: rgba(17, 17, 19, 0.20); background-clip: padding-box; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ── Components ─────────────────────────────────────────────── */
+
+/* Plain card on white */
+.surface-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
 }
-::-webkit-scrollbar-track {
-  background: transparent;
+
+/* Reflect-style top-bar tab (browser-tab look, not button) */
+.tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px 0 8px;
+  background: var(--surface-canvas);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.tab-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-500);
+  border-radius: 8px 8px 0 0;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: color 120ms ease, background 120ms ease;
+}
+.tab-item:hover { color: var(--ink-900); }
+.tab-item[data-active="true"] {
+  background: var(--surface-raised);
+  color: var(--ink-900);
+  border-color: var(--border-subtle);
+  margin-bottom: -1px;
+  padding-bottom: 8px;
+}
+.tab-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--ink-500);
+  cursor: pointer;
+}
+.tab-icon-btn:hover { background: rgba(17, 17, 19, 0.05); color: var(--ink-900); }
+
+/* "Note" / "Collections" inline label chip (matches mockup) */
+.chip-soft {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--accent-700);
+  background: var(--accent-50);
+  border: 1px solid var(--accent-100);
+}
+.chip-plain {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-500);
+}
+.chip-plain:hover { color: var(--ink-900); background: rgba(17, 17, 19, 0.04); }
+
+/* PDF tag pill — soft pastel inline marker */
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  border: 1px solid var(--ring, var(--border-default));
+  color: var(--fg, var(--ink-900));
+  background: var(--bg, var(--surface-raised));
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.tag-pill:hover:not(:disabled) {
+  transform: translateY(-0.5px);
+  box-shadow: 0 1px 4px rgba(17, 17, 19, 0.08);
+}
+.tag-pill:disabled {
+  cursor: wait;
+  background: #f1f0ed;
+  color: var(--ink-400);
+  border-color: var(--border-subtle);
+}
+/* Manual mode — concept detected but not yet generated. Softer + clickable. */
+.tag-pill[data-state="idle"] {
+  opacity: 0.65;
+  cursor: pointer;
+}
+.tag-pill[data-state="idle"]:hover {
+  opacity: 1;
+}
+.tag-pill[data-active="true"] {
+  outline: 2px solid var(--ink-900);
+  outline-offset: 1px;
 }

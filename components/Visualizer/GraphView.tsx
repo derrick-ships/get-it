@@ -5,7 +5,7 @@ import type { GraphSpec } from "@/lib/schemas";
 
 type Props = { spec: GraphSpec };
 
-const COLORS = ["#7dd3fc", "#fbbf24", "#f472b6", "#a78bfa", "#34d399", "#f87171"];
+const COLORS = ["#5b66f1", "#d97706", "#db2777", "#7c3aed", "#059669", "#dc2626"];
 
 function safeFn(expr: string): (x: number) => number {
   // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
@@ -35,7 +35,7 @@ export default function GraphView({ spec }: Props) {
     c.style.height = `${H}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    ctx.fillStyle = "#0b1020";
+    ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, W, H);
 
     const padL = 50;
@@ -89,14 +89,14 @@ export default function GraphView({ spec }: Props) {
           const y = padT + plotH - h;
           ctx.fillStyle = COLORS[i % COLORS.length];
           ctx.fillRect(x, y, bw, h);
-          ctx.fillStyle = "#cbd5e1";
+          ctx.fillStyle = "#2a2c33";
           ctx.fillText(b.label, x + bw / 2, padT + plotH + 16);
-          ctx.fillStyle = "#94a3b8";
+          ctx.fillStyle = "#6b6e78";
           ctx.fillText(String(b.value), x + bw / 2, y - 6);
         });
         // axis labels
         ctx.textAlign = "center";
-        ctx.fillStyle = "#94a3b8";
+        ctx.fillStyle = "#6b6e78";
         ctx.fillText(spec.x_label || "", W / 2, H - 6);
         ctx.save();
         ctx.translate(14, H / 2);
@@ -109,7 +109,7 @@ export default function GraphView({ spec }: Props) {
       // For non-bar charts: compute extents from all series.
       const allPts = series.flatMap((s) => s.points);
       if (!allPts.length) {
-        ctx.fillStyle = "#fda4af";
+        ctx.fillStyle = "#9f1f3a";
         ctx.fillText("No data points", 20, 40);
         return;
       }
@@ -136,10 +136,10 @@ export default function GraphView({ spec }: Props) {
       const sy = (y: number) => padT + plotH - ((y - yMin) / (yMax - yMin)) * plotH;
 
       // Grid + axes
-      ctx.strokeStyle = "rgba(255,255,255,0.08)";
+      ctx.strokeStyle = "rgba(20,22,26,0.08)";
       ctx.lineWidth = 1;
       ctx.font = "10px ui-sans-serif, system-ui";
-      ctx.fillStyle = "#94a3b8";
+      ctx.fillStyle = "#6b6e78";
       ctx.textAlign = "right";
       ctx.textBaseline = "middle";
       const yTicks = 5;
@@ -167,14 +167,14 @@ export default function GraphView({ spec }: Props) {
 
       // Origin axes
       if (xMin <= 0 && xMax >= 0) {
-        ctx.strokeStyle = "rgba(255,255,255,0.25)";
+        ctx.strokeStyle = "rgba(20,22,26,0.22)";
         ctx.beginPath();
         ctx.moveTo(sx(0), padT);
         ctx.lineTo(sx(0), padT + plotH);
         ctx.stroke();
       }
       if (yMin <= 0 && yMax >= 0) {
-        ctx.strokeStyle = "rgba(255,255,255,0.25)";
+        ctx.strokeStyle = "rgba(20,22,26,0.22)";
         ctx.beginPath();
         ctx.moveTo(padL, sy(0));
         ctx.lineTo(padL + plotW, sy(0));
@@ -214,7 +214,7 @@ export default function GraphView({ spec }: Props) {
         series.forEach((s) => {
           ctx.fillStyle = s.color;
           ctx.fillRect(lx, ly - 3, 18, 6);
-          ctx.fillStyle = "#cbd5e1";
+          ctx.fillStyle = "#2a2c33";
           const txt = s.name || "";
           ctx.fillText(txt, lx + 24, ly);
           lx += 30 + ctx.measureText(txt).width;
@@ -222,7 +222,7 @@ export default function GraphView({ spec }: Props) {
       }
 
       // Axis labels
-      ctx.fillStyle = "#94a3b8";
+      ctx.fillStyle = "#6b6e78";
       ctx.font = "11px ui-sans-serif, system-ui";
       ctx.textAlign = "center";
       ctx.fillText(spec.x_label || "x", padL + plotW / 2, H - 8);
@@ -241,7 +241,7 @@ export default function GraphView({ spec }: Props) {
     <div ref={containerRef} className="relative h-full w-full">
       <canvas ref={canvasRef} className="h-full w-full" />
       {error && (
-        <div className="absolute bottom-3 left-3 right-3 rounded-md bg-rose-950/80 px-3 py-2 text-xs text-rose-200">
+        <div className="absolute bottom-3 left-3 right-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
           {error}
         </div>
       )}

@@ -1,28 +1,42 @@
 import UploadCard from "@/components/UploadCard";
+import { ChevronDown, Upload, BookOpen, Users, Calendar, Plus, Settings2 } from "lucide-react";
 
 export default function Home() {
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#04060f] text-white">
-      {/* Decorative background */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-40 -left-40 h-96 w-96 rounded-full bg-fuchsia-500/20 blur-[120px]" />
-        <div className="absolute top-1/3 -right-40 h-96 w-96 rounded-full bg-violet-500/20 blur-[120px]" />
-        <div className="absolute bottom-0 left-1/2 h-72 w-[40rem] -translate-x-1/2 rounded-full bg-sky-500/15 blur-[120px]" />
+    <main className="flex min-h-screen flex-col bg-[var(--surface-canvas)] text-[var(--ink-900)]">
+      {/* Top tab bar — Reflect-style browser-tabs */}
+      <div className="tab-bar">
+        <div className="tab-icon-btn" aria-hidden>
+          <ChevronDown className="h-3.5 w-3.5 rotate-90" />
+        </div>
+        <div className="tab-item" data-active="true">
+          <Upload className="h-3.5 w-3.5 text-[var(--accent-600)]" />
+          <span>Upload</span>
+        </div>
+        <div className="tab-item">
+          <BookOpen className="h-3.5 w-3.5 text-[var(--ink-400)]" />
+          <span>Library</span>
+        </div>
+        <div className="tab-item">
+          <Users className="h-3.5 w-3.5 text-[var(--ink-400)]" />
+          <span>Concepts</span>
+        </div>
+        <div className="tab-item">
+          <Calendar className="h-3.5 w-3.5 text-[var(--ink-400)]" />
+          <span>Recent</span>
+        </div>
+        <div className="tab-icon-btn ml-1" aria-hidden>
+          <Plus className="h-3.5 w-3.5" />
+        </div>
+        <div className="ml-auto flex items-center gap-1">
+          <div className="tab-icon-btn" aria-hidden>
+            <Settings2 className="h-4 w-4" />
+          </div>
+        </div>
       </div>
-      <div className="relative">
-        <nav className="flex items-center justify-between px-8 py-5">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-fuchsia-500 to-violet-600 shadow-lg shadow-fuchsia-500/20">
-              <span className="text-sm font-bold text-white">B</span>
-            </div>
-            <span className="text-base font-semibold tracking-tight">
-              Braynr <span className="text-white/50">Visualizer</span>
-            </span>
-          </div>
-          <div className="hidden items-center gap-5 text-xs text-white/55 md:flex">
-            <span>3D · 2D anim · formulas · graphs · sources</span>
-          </div>
-        </nav>
+
+      {/* White content sheet */}
+      <div className="flex-1 bg-[var(--surface-raised)]">
         <UploadCard />
       </div>
     </main>

@@ -2,8 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, FileText, RefreshCw, AlertCircle, MousePointerClick } from "lucide-react";
-import { motion } from "framer-motion";
+import {
+  ArrowLeft,
+  FileText,
+  RefreshCw,
+  AlertCircle,
+  MousePointerClick,
+  ChevronDown,
+  Plus,
+  Settings2,
+  BookOpen,
+  Users,
+  Calendar,
+} from "lucide-react";
 
 import PdfViewer, { type Tag } from "@/components/PdfViewer";
 import Visualizer from "@/components/Visualizer";
@@ -284,12 +295,12 @@ export default function ViewerClient({ docId }: { docId: string }) {
 
   if (loadError) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center gap-3 bg-slate-950 text-white">
-        <AlertCircle className="h-7 w-7 text-rose-400" />
-        <p className="text-sm text-white/80">{loadError}</p>
+      <div className="flex h-screen flex-col items-center justify-center gap-3 bg-[var(--surface-canvas)] text-[var(--ink-900)]">
+        <AlertCircle className="h-7 w-7 text-rose-500" />
+        <p className="text-sm text-[var(--ink-700)]">{loadError}</p>
         <Link
           href="/"
-          className="rounded-full bg-white/10 px-4 py-1.5 text-sm hover:bg-white/20"
+          className="rounded-full bg-[var(--ink-900)] px-4 py-1.5 text-sm font-medium text-white hover:bg-black"
         >
           Back to upload
         </Link>
@@ -299,8 +310,9 @@ export default function ViewerClient({ docId }: { docId: string }) {
 
   if (!meta) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-950 text-white/60">
-        <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> loading document…
+      <div className="flex h-screen items-center justify-center bg-[var(--surface-canvas)] text-[var(--ink-500)]">
+        <RefreshCw className="mr-2 h-4 w-4 animate-spin text-[var(--accent-600)]" />
+        loading document…
       </div>
     );
   }
@@ -311,45 +323,64 @@ export default function ViewerClient({ docId }: { docId: string }) {
   const tagReadyCount = tags.filter((t) => t.ready).length;
   const tagGeneratingCount = tags.filter((t) => t.generating).length;
 
+  const truncated =
+    docTitle && docTitle.length > 28 ? `${docTitle.slice(0, 28)}…` : docTitle ?? meta.filename;
+
   return (
-    <div className="flex h-screen flex-col bg-slate-950">
-      <header className="z-10 flex shrink-0 items-center justify-between gap-4 border-b border-white/10 bg-slate-950/80 px-4 py-2.5 backdrop-blur">
-        <div className="flex min-w-0 items-center gap-3">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-3 py-1 text-xs text-white/70 hover:bg-white/10"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" /> Back
-          </Link>
-          <div className="flex items-center gap-2 text-white/80">
-            <FileText className="h-4 w-4 text-white/40" />
-            <p className="truncate text-sm font-medium">{docTitle ?? meta.filename}</p>
-            <span className="text-xs text-white/40">· {meta.numPages} pages</span>
-          </div>
+    <div className="flex h-screen flex-col bg-[var(--surface-canvas)]">
+      {/* Top tab bar */}
+      <div className="tab-bar shrink-0">
+        <Link href="/" className="tab-icon-btn" title="Back">
+          <ArrowLeft className="h-3.5 w-3.5" />
+        </Link>
+        <div className="tab-item" data-active="true">
+          <FileText className="h-3.5 w-3.5 text-[var(--accent-600)]" />
+          <span className="max-w-[180px] truncate">{truncated}</span>
           {!AUTO_GENERATE_VIZ && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-amber-200">
-              <MousePointerClick className="h-3 w-3" /> manual mode
+            <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-amber-700">
+              <MousePointerClick className="h-2.5 w-2.5" /> manual
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3 text-[11px] text-white/55">
+        <div className="tab-item">
+          <BookOpen className="h-3.5 w-3.5 text-[var(--ink-400)]" />
+          <span>Library</span>
+        </div>
+        <div className="tab-item">
+          <Users className="h-3.5 w-3.5 text-[var(--ink-400)]" />
+          <span>Concepts</span>
+        </div>
+        <div className="tab-item">
+          <Calendar className="h-3.5 w-3.5 text-[var(--ink-400)]" />
+          <span>Recent</span>
+        </div>
+        <div className="tab-icon-btn ml-1">
+          <Plus className="h-3.5 w-3.5" />
+        </div>
+        <div className="ml-auto flex items-center gap-2 pr-1">
           <ProgressChip
-            label="pages analyzed"
+            label="pages"
             value={doneCount}
             total={totalPages}
             spinning={detecting}
           />
           <ProgressChip
-            label={AUTO_GENERATE_VIZ ? "visualizations ready" : "tags clicked"}
+            label={AUTO_GENERATE_VIZ ? "viz ready" : "clicked"}
             value={tagReadyCount}
             total={AUTO_GENERATE_VIZ ? tags.length : tagReadyCount + tagGeneratingCount}
             spinning={tagGeneratingCount > 0}
           />
+          <div className="tab-icon-btn">
+            <ChevronDown className="h-3.5 w-3.5" />
+          </div>
+          <div className="tab-icon-btn">
+            <Settings2 className="h-3.5 w-3.5" />
+          </div>
         </div>
-      </header>
+      </div>
 
-      <div className="flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1 border-r border-white/10">
+      <div className="flex min-h-0 flex-1 gap-2 bg-[var(--surface-canvas)] p-2">
+        <div className="min-w-0 flex-1 overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-white">
           <PdfViewer
             pdfUrl={meta.pdfUrl}
             numPages={meta.numPages}
@@ -360,28 +391,26 @@ export default function ViewerClient({ docId }: { docId: string }) {
             detecting={detecting}
           />
         </div>
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="w-[44%] min-w-[420px] max-w-[720px] bg-gradient-to-br from-slate-900 via-slate-950 to-black"
-        >
-          <Visualizer
-            spec={activeSpec}
-            loading={activeTag != null && !activeTag.spec && !activeTag.error}
-            emptyHint={
-              tags.length === 0
-                ? "codex is reading the document — tags will appear inline as soon as they're detected."
-                : AUTO_GENERATE_VIZ
-                  ? "Click any colored tag in the document to render its concept here."
-                  : "Click any tag to generate its visualization. (manual mode is on — see .env)"
-            }
-          />
+        <div className="flex w-[44%] min-w-[420px] max-w-[720px] flex-col overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-white">
+          <div className="min-h-0 flex-1">
+            <Visualizer
+              spec={activeSpec}
+              loading={activeTag != null && !activeTag.spec && !activeTag.error}
+              emptyHint={
+                tags.length === 0
+                  ? "codex is reading the document — tags will appear inline as soon as they're detected."
+                  : AUTO_GENERATE_VIZ
+                    ? "Click any colored tag in the document to render its concept here."
+                    : "Click any tag to generate its visualization. (manual mode is on — see .env)"
+              }
+            />
+          </div>
           {activeTag?.error && (
-            <div className="border-t border-rose-500/30 bg-rose-950/40 px-5 py-3 text-xs text-rose-200">
+            <div className="shrink-0 border-t border-rose-200 bg-rose-50 px-5 py-3 text-xs text-rose-700">
               {activeTag.error}
             </div>
           )}
-        </motion.div>
+        </div>
       </div>
     </div>
   );
@@ -399,13 +428,13 @@ function ProgressChip({
   spinning?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1">
-      {spinning && <RefreshCw className="h-3 w-3 animate-spin text-fuchsia-300" />}
-      <span className="tabular-nums text-white/85">
+    <div className="flex items-center gap-1.5 rounded-md border border-[var(--border-subtle)] bg-white px-2 py-1 text-[11px]">
+      {spinning && <RefreshCw className="h-3 w-3 animate-spin text-[var(--accent-600)]" />}
+      <span className="tabular-nums font-medium text-[var(--ink-900)]">
         {value}
-        <span className="text-white/40">/{total}</span>
+        <span className="font-normal text-[var(--ink-400)]">/{total}</span>
       </span>
-      <span className="text-white/45">{label}</span>
+      <span className="text-[var(--ink-500)]">{label}</span>
     </div>
   );
 }
