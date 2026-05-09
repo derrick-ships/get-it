@@ -62,7 +62,9 @@ export default function TwoDAnimView({ spec, onRuntimeError }: Props) {
         | undefined;
       if (ret && typeof ret.draw === "function") drawCb = ret.draw;
     } catch (e) {
-      console.error("2D anim setup error", e);
+      // warn (not error) — Next.js dev overlay treats console.error as
+      // an "Issue". The orchestrator handles retries.
+      console.warn("2D anim setup threw (will be reported for repair):", e);
       reportError(`Animation crashed at setup: ${(e as Error).message}`);
     }
 
@@ -74,7 +76,7 @@ export default function TwoDAnimView({ spec, onRuntimeError }: Props) {
       try {
         drawCb?.(ctx, container.clientWidth, container.clientHeight, t, dt);
       } catch (e) {
-        console.error("2D anim draw error", e);
+        console.warn("2D anim draw threw (will be reported for repair):", e);
         reportError(`Animation crashed mid-frame: ${(e as Error).message}`);
         return;
       }

@@ -107,7 +107,9 @@ export default function ThreeDView({ spec, onRuntimeError }: Props) {
         | undefined;
       if (ret && typeof ret.update === "function") updateCb = ret.update;
     } catch (e) {
-      console.error("3D setup error", e);
+      // Use warn (not error) so Next.js dev overlay doesn't surface the
+      // crash as an Issue — the orchestrator handles retries.
+      console.warn("3D setup error (will be reported for repair):", e);
       reportError(`3D scene crashed: ${(e as Error).message}`);
     }
 
@@ -144,7 +146,7 @@ export default function ThreeDView({ spec, onRuntimeError }: Props) {
       try {
         updateCb?.(t);
       } catch (e) {
-        console.error("3D update error", e);
+        console.warn("3D update threw (will be reported for repair):", e);
         reportError(`3D scene update threw: ${(e as Error).message}`);
         cancelAnimationFrame(raf);
         return; // stop the loop; orchestrator will swap the spec out

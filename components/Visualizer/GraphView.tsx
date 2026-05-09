@@ -245,7 +245,7 @@ export default function GraphView({ spec, onRuntimeError }: Props) {
       ctx.fillText(spec.y_label || "y", 0, 0);
       ctx.restore();
     } catch (e) {
-      console.error("graph render error", e);
+      console.warn("graph render threw (will be reported for repair):", e);
       reportError(`Graph render failed: ${(e as Error).message}`);
     }
     // onRuntimeError captured by closure; we don't re-render the chart on

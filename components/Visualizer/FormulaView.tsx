@@ -17,7 +17,7 @@ function Tex({ tex, displayMode = true }: { tex: string; displayMode?: boolean }
       });
     } catch (e) {
       ref.current.textContent = tex;
-      console.error("KaTeX error", e);
+      console.warn("KaTeX render error (falling back to plain text):", e);
     }
   }, [tex, displayMode]);
   return <span ref={ref} />;

@@ -125,7 +125,11 @@ export function vizSchemaFor(type: VizType): object {
           type: { type: "string", const: "3d" },
           title: { type: "string", minLength: 2, maxLength: 80 },
           caption: { type: "string", minLength: 5, maxLength: 280 },
-          setup_code: { type: "string", minLength: 30, maxLength: 8000 },
+          // Generous cap: complex anatomy / molecule scenes can run long.
+          // Keeping room here means the model never gets cut off
+          // mid-expression (which used to manifest as "Unexpected end of
+          // input" / "missing ) after argument list" SyntaxErrors).
+          setup_code: { type: "string", minLength: 30, maxLength: 16000 },
         },
       };
     case "2d-anim":
@@ -137,7 +141,7 @@ export function vizSchemaFor(type: VizType): object {
           type: { type: "string", const: "2d-anim" },
           title: { type: "string", minLength: 2, maxLength: 80 },
           caption: { type: "string", minLength: 5, maxLength: 280 },
-          setup_code: { type: "string", minLength: 30, maxLength: 8000 },
+          setup_code: { type: "string", minLength: 30, maxLength: 16000 },
         },
       };
     case "2d-text":

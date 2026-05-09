@@ -204,7 +204,9 @@ export default function ViewerClient({ docId }: { docId: string }) {
           ) {
             return;
           }
-          console.error("viz generation error for", next.label, e);
+          // warn — failure is also surfaced to the user via tag.error.
+          // Avoids triggering Next.js dev overlay's "1 Issue" badge.
+          console.warn("viz generation failed for", next.label, e);
           setTags((prev) =>
             prev.map((t) =>
               t.id === next.id
@@ -253,6 +255,12 @@ export default function ViewerClient({ docId }: { docId: string }) {
       if (!tag) return;
       const attemptsSoFar = tag.attempts ?? 1;
       if (attemptsSoFar > MAX_VIZ_GEN_RETRIES) {
+        // Out of repair budget. Keep the raw runtime detail in console for
+        // debugging; surface a calm, humanised line to the user instead.
+        console.warn(
+          `[braynr] giving up on "${tag.label}" after ${attemptsSoFar} attempts:`,
+          message,
+        );
         setTags((prev) =>
           prev.map((t) =>
             t.id === tagId
@@ -260,7 +268,7 @@ export default function ViewerClient({ docId }: { docId: string }) {
                   ...t,
                   ready: false,
                   generating: false,
-                  error: `Visualization failed after ${attemptsSoFar} attempts: ${message}`,
+                  error: `Couldn't render this concept — the agent's code kept failing to compile after ${attemptsSoFar} attempts.`,
                   lastRuntimeError: message,
                 }
               : t,
@@ -346,7 +354,7 @@ export default function ViewerClient({ docId }: { docId: string }) {
         ) {
           return;
         }
-        console.error(`page ${pageIndex} analyze error`, e);
+        console.warn(`page ${pageIndex} analyze failed`, e);
       } finally {
         if (!cancelledRef.current) {
           setPagesAnalyzing((s) => {
@@ -596,9 +604,10 @@ export default function ViewerClient({ docId }: { docId: string }) {
         <div className="flex w-[44%] min-w-[420px] max-w-[720px] flex-col overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-white">
           <div className="min-h-0 flex-1">
             <Visualizer
-              // While retrying, hide the broken spec so the loader shows.
-              // We still keep the spec on the tag itself for repair context.
-              spec={activeTag?.generating ? null : activeSpec}
+              // While retrying OR after final failure, hide the broken
+              // spec so the loader / empty state shows. The spec is kept
+              // on the tag itself only as repair context.
+              spec={activeTag?.generating || activeTag?.error ? null : activeSpec}
               loading={
                 activeTag != null && !activeTag.error &&
                 (activeTag.generating || !activeTag.spec)
@@ -612,16 +621,18 @@ export default function ViewerClient({ docId }: { docId: string }) {
                 activeTag ? (msg) => handleRuntimeError(activeTag.id, msg) : undefined
               }
               emptyHint={
-                tags.length === 0
-                  ? "codex is reading the document — tags will appear inline as soon as they're detected."
-                  : AUTO_GENERATE_VIZ
-                    ? "Click any colored tag in the document to render its concept here."
-                    : "Click any tag to generate its visualization. (manual mode is on — see .env)"
+                activeTag?.error
+                  ? "We weren't able to build a working visualization for this concept. Pick another tag — most of them work cleanly."
+                  : tags.length === 0
+                    ? "codex is reading the document — tags will appear inline as soon as they're detected."
+                    : AUTO_GENERATE_VIZ
+                      ? "Click any colored tag in the document to render its concept here."
+                      : "Click any tag to generate its visualization. (manual mode is on — see .env)"
               }
             />
           </div>
           {activeTag?.error && (
-            <div className="shrink-0 border-t border-rose-200 bg-rose-50 px-5 py-3 text-xs text-rose-700">
+            <div className="shrink-0 border-t border-amber-200 bg-amber-50 px-5 py-3 text-[12px] text-amber-800">
               {activeTag.error}
             </div>
           )}
