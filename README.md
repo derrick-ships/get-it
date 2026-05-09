@@ -39,6 +39,28 @@ generates a spec for every detected tag, or waits for a click:
   until the user clicks a tag. A small "manual mode" chip shows up in
   the viewer header. Use this when iterating on the UI.
 
+### Tab-scoped persistence
+
+Viewer state is mirrored to `sessionStorage` so it survives F5 / Next.js
+Fast-Refresh / browser back-forward, and dies cleanly when the tab
+closes. Specifically:
+
+- detected tags + their positions
+- generated viz specs (instantly re-rendered after reload)
+- which pages have already been analyzed (no re-detection)
+- the active tag selection (right pane stays on the same viz)
+
+Tags whose generation was *in flight* when the page reloaded are
+re-enqueued on mount, so the work just keeps going. A "restored" chip
+in the header confirms a cache hit; a "reset" button next to the
+progress chips wipes the cache and re-detects from scratch.
+
+Implementation: [`lib/persistence.ts`](lib/persistence.ts) wraps the
+`sessionStorage` calls, [`app/viewer/[docId]/viewer-client.tsx`]
+hydrates on mount via `useState` lazy initializers, debounce-saves on
+every state change, and force-flushes synchronously on `pagehide` /
+`visibilitychange:hidden` so nothing is lost to the debounce window.
+
 ---
 
 Open the home page, drop a PDF (or click any of the 5 sample documents),
