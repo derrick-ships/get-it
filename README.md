@@ -74,8 +74,8 @@ Get It runs on your machine, against your own Codex login, on your own PDFs. **E
 - A PDF with a real text layer (we do not OCR scans).
 
 ```bash
-git clone https://github.com/beltromatti/braynr-hack-2026.git
-cd braynr-hack-2026
+git clone https://github.com/beltromatti/get-it.git
+cd get-it
 npm install
 cp .env.example .env        # tweak knobs if you want; defaults are fine
 npm run generate-pdfs       # one-time: build 5 sample textbooks into public/pdfs/
