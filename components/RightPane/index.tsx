@@ -25,6 +25,7 @@ import {
   Baby,
   ChevronDown,
   MoreHorizontal,
+  Download,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -104,7 +105,12 @@ type Props = {
 export default function RightPane({ docId, mode, onModeChange, visualizer }: Props) {
   return (
     <div className="flex h-full flex-col bg-white">
-      <Header mode={mode} onModeChange={onModeChange} visualizerSpec={visualizer.spec} />
+      <Header
+        docId={docId}
+        mode={mode}
+        onModeChange={onModeChange}
+        visualizerSpec={visualizer.spec}
+      />
 
       <div className="relative min-h-0 flex-1 bg-white">
         {mode === "visualizer" && (
@@ -157,16 +163,21 @@ export default function RightPane({ docId, mode, onModeChange, visualizer }: Pro
 // ── Header (mode dropdown + active title) ─────────────────────────────
 
 function Header({
+  docId,
   mode,
   onModeChange,
   visualizerSpec,
 }: {
+  docId: string;
   mode: RightPaneMode;
   onModeChange: (m: RightPaneMode) => void;
   visualizerSpec: VizSpec | null;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -183,6 +194,47 @@ function Header({
       window.removeEventListener("keydown", onKey);
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMoreOpen(false);
+    };
+    window.addEventListener("mousedown", onClick);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onClick);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [moreOpen]);
+
+  const downloadWorkContext = async () => {
+    setDownloading(true);
+    try {
+      const r = await fetch(`/api/work-context/${docId}`, { cache: "no-store" });
+      if (!r.ok) throw new Error(`download failed (${r.status})`);
+      const data = await r.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      a.href = url;
+      a.download = `braynr-work-context-${docId.slice(0, 8)}-${stamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Give the browser a tick before revoking so the download actually starts.
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      console.warn("[braynr] work-context download failed", e);
+    } finally {
+      setDownloading(false);
+      setMoreOpen(false);
+    }
+  };
 
   const current = MODES.find((m) => m.id === mode)!;
   const CurrentIcon = current.Icon;
@@ -276,9 +328,46 @@ function Header({
         )}
         <p className="truncate text-[13.5px] font-medium text-[var(--ink-900)]">{subtitle}</p>
       </div>
-      <button type="button" className="tab-icon-btn">
-        <MoreHorizontal className="h-4 w-4" />
-      </button>
+      <div ref={moreRef} className="relative">
+        <button
+          type="button"
+          onClick={() => setMoreOpen((v) => !v)}
+          className="tab-icon-btn"
+          aria-label="More actions"
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </button>
+        <AnimatePresence>
+          {moreOpen && (
+            <motion.div
+              key="more-menu"
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.12 }}
+              className="absolute right-0 top-full z-20 mt-1.5 w-72 overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-white shadow-[0_8px_24px_rgba(17,17,19,0.08)]"
+            >
+              <button
+                type="button"
+                onClick={downloadWorkContext}
+                disabled={downloading}
+                className="flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[var(--surface-sunken)] disabled:opacity-60"
+              >
+                <Download className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--ink-500)]" />
+                <div className="min-w-0">
+                  <p className="text-[12.5px] font-medium text-[var(--ink-900)]">
+                    {downloading ? "Preparing download…" : "Download work context (JSON)"}
+                  </p>
+                  <p className="text-[11px] leading-relaxed text-[var(--ink-500)]">
+                    Your full interaction journal — chats, flashcards, Feynman sessions — exactly as
+                    the evaluator sees it right now.
+                  </p>
+                </div>
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </header>
   );
 }

@@ -12,11 +12,35 @@ import {
   Settings2,
   RotateCcw,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 import PdfViewer, { type Tag } from "@/components/PdfViewer";
 import RightPane, { type RightPaneMode } from "@/components/RightPane";
 import type { DetectedConcept, VizSpec, VizType } from "@/lib/schemas";
 import { AUTO_GENERATE_VIZ, MAX_VIZ_GEN_RETRIES } from "@/lib/config";
+
+// Runtime-mutable settings — initial values mirror the env-driven defaults
+// from lib/config.ts; the user can override them mid-session via the
+// settings popover in the top tab bar. Persisted to sessionStorage so a
+// reload keeps the user's adjustments.
+const SETTINGS_KEY_AUTO = "braynr:settings:autoGenerate";
+const SETTINGS_KEY_MAX = "braynr:settings:maxRetries";
+
+function readPersistedAuto(): boolean {
+  if (typeof window === "undefined") return AUTO_GENERATE_VIZ;
+  const v = window.sessionStorage.getItem(SETTINGS_KEY_AUTO);
+  if (v === "true") return true;
+  if (v === "false") return false;
+  return AUTO_GENERATE_VIZ;
+}
+
+function readPersistedMaxRetries(): number {
+  if (typeof window === "undefined") return MAX_VIZ_GEN_RETRIES;
+  const v = window.sessionStorage.getItem(SETTINGS_KEY_MAX);
+  if (!v) return MAX_VIZ_GEN_RETRIES;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : MAX_VIZ_GEN_RETRIES;
+}
 import {
   clearDocState,
   loadDocState,
@@ -92,6 +116,32 @@ export default function ViewerClient({ docId }: { docId: string }) {
     () => new Set(persistedOnMount?.pagesAnalyzed ?? []),
   );
   const restoredFromCache = persistedOnMount !== null;
+
+  // Runtime settings (env defaults at first render; overridable from the
+  // settings popover; sessionStorage-persisted within the tab).
+  const [autoGenerate, setAutoGenerate] = useState<boolean>(readPersistedAuto);
+  const [maxRetries, setMaxRetries] = useState<number>(readPersistedMaxRetries);
+  // Refs mirror the latest values so callbacks/effects captured by long-
+  // running closures (page detection, runtime-error retry) read the live
+  // setting instead of a stale capture.
+  const autoGenerateRef = useRef(autoGenerate);
+  const maxRetriesRef = useRef(maxRetries);
+  autoGenerateRef.current = autoGenerate;
+  maxRetriesRef.current = maxRetries;
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(SETTINGS_KEY_AUTO, String(autoGenerate));
+    } catch {
+      /* noop */
+    }
+  }, [autoGenerate]);
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(SETTINGS_KEY_MAX, String(maxRetries));
+    } catch {
+      /* noop */
+    }
+  }, [maxRetries]);
 
   // Right-pane mode (Visualizer / KG / Chat / Flashcards / Feynman). The
   // mode is tab-scoped — we re-load it from sessionStorage so it survives
@@ -281,7 +331,7 @@ export default function ViewerClient({ docId }: { docId: string }) {
       const tag = tagsRef.current.find((t) => t.id === tagId);
       if (!tag) return;
       const attemptsSoFar = tag.attempts ?? 1;
-      if (attemptsSoFar > MAX_VIZ_GEN_RETRIES) {
+      if (attemptsSoFar > maxRetriesRef.current) {
         // Out of repair budget. Keep the raw runtime detail in console for
         // debugging; surface a calm, humanised line to the user instead.
         console.warn(
@@ -354,7 +404,7 @@ export default function ViewerClient({ docId }: { docId: string }) {
               type: c.type as VizType,
               label: c.label,
               ready: false,
-              generating: AUTO_GENERATE_VIZ,
+              generating: autoGenerateRef.current,
               concept: c,
             };
           })
@@ -364,7 +414,7 @@ export default function ViewerClient({ docId }: { docId: string }) {
           const seen = new Set(prev.map((t) => t.id));
           return [...prev, ...newTags.filter((t) => !seen.has(t.id))];
         });
-        if (AUTO_GENERATE_VIZ) {
+        if (autoGenerateRef.current) {
           for (const t of newTags) {
             if (enqueuedRef.current.has(t.id)) continue;
             enqueuedRef.current.add(t.id);
@@ -514,6 +564,22 @@ export default function ViewerClient({ docId }: { docId: string }) {
     window.location.reload();
   }, [docId]);
 
+  // When the user flips auto-generate from off to on mid-session, sweep
+  // any idle tags into the queue so they don't sit there waiting for a
+  // click. Off→on transitions are detected by comparing against a ref.
+  // Off→on is the only transition that triggers work; on→off lets in-
+  // flight generations finish naturally.
+  const prevAutoRef = useRef(autoGenerate);
+  useEffect(() => {
+    if (!prevAutoRef.current && autoGenerate) {
+      const idle = tagsRef.current.filter(
+        (t) => !t.spec && !t.error && !t.generating && !enqueuedRef.current.has(t.id),
+      );
+      for (const t of idle) enqueueTagForGen(t);
+    }
+    prevAutoRef.current = autoGenerate;
+  }, [autoGenerate, enqueueTagForGen]);
+
   if (loadError) {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-3 bg-[var(--surface-canvas)] text-[var(--ink-900)]">
@@ -557,7 +623,7 @@ export default function ViewerClient({ docId }: { docId: string }) {
         <div className="tab-item" data-active="true">
           <FileText className="h-3.5 w-3.5 text-[var(--accent-600)]" />
           <span className="max-w-[180px] truncate">{truncated}</span>
-          {!AUTO_GENERATE_VIZ && (
+          {!autoGenerate && (
             <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-amber-700">
               <MousePointerClick className="h-2.5 w-2.5" /> manual
             </span>
@@ -583,9 +649,9 @@ export default function ViewerClient({ docId }: { docId: string }) {
             spinning={detecting}
           />
           <ProgressChip
-            label={AUTO_GENERATE_VIZ ? "viz ready" : "clicked"}
+            label={autoGenerate ? "viz ready" : "clicked"}
             value={tagReadyCount}
-            total={AUTO_GENERATE_VIZ ? tags.length : tagReadyCount + tagGeneratingCount}
+            total={autoGenerate ? tags.length : tagReadyCount + tagGeneratingCount}
             spinning={tagGeneratingCount > 0}
           />
           <button
@@ -596,9 +662,12 @@ export default function ViewerClient({ docId }: { docId: string }) {
           >
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
-          <div className="tab-icon-btn">
-            <Settings2 className="h-3.5 w-3.5" />
-          </div>
+          <SettingsMenu
+            autoGenerate={autoGenerate}
+            onAutoGenerateChange={setAutoGenerate}
+            maxRetries={maxRetries}
+            onMaxRetriesChange={setMaxRetries}
+          />
         </div>
       </div>
 
@@ -629,7 +698,7 @@ export default function ViewerClient({ docId }: { docId: string }) {
                 (activeTag.generating || !activeTag.spec),
               loadingDetail:
                 activeTag?.generating && (activeTag.attempts ?? 0) >= 1
-                  ? `repairing — attempt ${(activeTag.attempts ?? 0) + 1} of ${MAX_VIZ_GEN_RETRIES + 1}`
+                  ? `repairing — attempt ${(activeTag.attempts ?? 0) + 1} of ${maxRetries + 1}`
                   : undefined,
               onRuntimeError: activeTag
                 ? (msg) => handleRuntimeError(activeTag.id, msg)
@@ -638,9 +707,9 @@ export default function ViewerClient({ docId }: { docId: string }) {
                 ? "We weren't able to build a working visualization for this concept. Pick another tag — most of them work cleanly."
                 : tags.length === 0
                   ? "codex is reading the document — tags will appear inline as soon as they're detected."
-                  : AUTO_GENERATE_VIZ
+                  : autoGenerate
                     ? "Click any colored tag in the document to render its concept here."
-                    : "Click any tag to generate its visualization. (manual mode is on — see .env)",
+                    : "Click any tag to generate its visualization. (manual mode — toggle auto-generate in settings)",
               activeTagError: activeTag?.error ?? null,
             }}
           />
@@ -669,6 +738,130 @@ function ProgressChip({
         <span className="font-normal text-[var(--ink-400)]">/{total}</span>
       </span>
       <span className="text-[var(--ink-500)]">{label}</span>
+    </div>
+  );
+}
+
+function SettingsMenu({
+  autoGenerate,
+  onAutoGenerateChange,
+  maxRetries,
+  onMaxRetriesChange,
+}: {
+  autoGenerate: boolean;
+  onAutoGenerateChange: (v: boolean) => void;
+  maxRetries: number;
+  onMaxRetriesChange: (v: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("mousedown", onClick);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onClick);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="tab-icon-btn"
+        title="Settings"
+        aria-label="Settings"
+      >
+        <Settings2 className="h-3.5 w-3.5" />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            key="settings-menu"
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.12 }}
+            className="absolute right-0 top-full z-30 mt-1.5 w-80 overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-white shadow-[0_8px_24px_rgba(17,17,19,0.08)]"
+          >
+            <div className="border-b border-[var(--border-subtle)] px-3 py-2">
+              <p className="text-[10.5px] font-semibold uppercase tracking-wider text-[var(--ink-500)]">
+                Visualizer settings
+              </p>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-[var(--ink-400)]">
+                Mirrors <code>NEXT_PUBLIC_AUTO_GENERATE_VIZ</code> and{" "}
+                <code>NEXT_PUBLIC_MAX_VIZ_GEN_RETRIES</code>. Changes apply to this tab.
+              </p>
+            </div>
+
+            {/* Auto-generate toggle */}
+            <div className="flex items-start gap-2.5 px-3 py-2.5">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={autoGenerate}
+                onClick={() => onAutoGenerateChange(!autoGenerate)}
+                className={`mt-0.5 inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors ${
+                  autoGenerate
+                    ? "bg-[var(--accent-600)]"
+                    : "bg-[var(--surface-sunken)] ring-1 ring-inset ring-[var(--border-default)]"
+                }`}
+              >
+                <span
+                  className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${
+                    autoGenerate ? "translate-x-3.5" : "translate-x-0.5"
+                  }`}
+                />
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className="text-[12.5px] font-medium text-[var(--ink-900)]">
+                  Auto-generate visualizations
+                </p>
+                <p className="text-[11px] leading-relaxed text-[var(--ink-500)]">
+                  {autoGenerate
+                    ? "Every detected tag fires its viz generation in parallel."
+                    : "Tags appear after detection but only render on click."}
+                </p>
+              </div>
+            </div>
+
+            {/* Max retries number input */}
+            <div className="flex items-start gap-2.5 border-t border-[var(--border-subtle)] px-3 py-2.5">
+              <div className="min-w-0 flex-1">
+                <p className="text-[12.5px] font-medium text-[var(--ink-900)]">
+                  Max viz repair attempts
+                </p>
+                <p className="text-[11px] leading-relaxed text-[var(--ink-500)]">
+                  Extra calls after a runtime error. Total attempts per tag = 1 + this.
+                </p>
+              </div>
+              <input
+                type="number"
+                min={0}
+                max={10}
+                step={1}
+                value={maxRetries}
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  if (Number.isFinite(n) && n >= 0) {
+                    onMaxRetriesChange(Math.min(10, Math.floor(n)));
+                  }
+                }}
+                className="h-7 w-14 shrink-0 rounded-md border border-[var(--border-subtle)] bg-white px-2 text-right text-[12.5px] font-medium tabular-nums text-[var(--ink-900)] focus:border-[var(--accent-500)] focus:outline-none"
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
