@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import CodexHealthBanner from "@/components/CodexHealthBanner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Braynr Visualizer — read with a brain on your shoulder",
+  title: "Get It — read it, see it, get it",
   description:
-    "Drop in any tagged PDF. Braynr's agent picks the concepts that benefit from a picture and renders them in 3D, animation, formulas, graphs, or live sources right next to the text.",
+    "Drop in any tagged PDF. Get It's agents pick the concepts that benefit from a picture and render them in 3D, animation, formulas, graphs, or live sources right next to the text — and back-reflect your mastery onto a knowledge graph.",
 };
 
 export default function RootLayout({
@@ -29,6 +30,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-[var(--surface-canvas)] text-[var(--ink-900)]">
+        <CodexHealthBanner />
         {children}
       </body>
     </html>

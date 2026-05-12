@@ -1,25 +1,39 @@
 /**
- * In-memory + on-disk store for uploaded documents.
- * Process-local — we keep PDFs in /tmp/braynr-uploads/<docId>.pdf and the
- * extracted text in memory keyed by docId. Good enough for a single-user demo.
+ * Persistent document store.
  *
- * NOTE: a Next.js dev server reloads modules on file changes, so this map is
- * also stashed on `globalThis` to survive HMR.
+ * Each doc lives in its own folder under <DATA_DIR>/docs/<docId>/ — see
+ * lib/paths.ts for the full layout. A global index at <DATA_DIR>/docs.json
+ * lists every known doc so the Library page can render the catalog
+ * without scanning the filesystem.
+ *
+ * In-memory cache:
+ *   We keep a Map<docId, StoreEntry> for hot lookups (analyze-pdf, chat,
+ *   etc. all read .extracted on every request). On a cache miss we lazy-
+ *   load meta + cached extraction from disk. That makes the store
+ *   resilient to server restarts and to a cold Electron launch.
  */
 
 import fs from "node:fs";
-import path from "node:path";
-import os from "node:os";
 import { randomUUID } from "node:crypto";
+import {
+  DOCS_INDEX_PATH,
+  docDir,
+  ensureDocDir,
+  extractedPath,
+  metaPath,
+} from "./paths";
 import type { ExtractedPdf } from "./pdf-extract";
 
-export const UPLOADS_DIR = path.join(os.tmpdir(), "braynr-uploads");
-fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+export { pdfPath } from "./paths";
 
-type StoreEntry = {
+export type DocMeta = {
   id: string;
   filename: string;
   uploadedAt: number;
+  numPages: number;
+};
+
+type StoreEntry = DocMeta & {
   extracted: ExtractedPdf;
   /** Public URL the client can fetch the raw PDF from. */
   pdfUrl: string;
@@ -37,14 +51,92 @@ export function newDocId(): string {
   return randomUUID();
 }
 
-export function pdfPath(docId: string): string {
-  return path.join(UPLOADS_DIR, `${docId}.pdf`);
+// ── Docs index (on-disk catalog of every known doc) ────────────────────
+
+function readIndex(): DocMeta[] {
+  try {
+    const raw = fs.readFileSync(DOCS_INDEX_PATH, "utf-8");
+    const parsed = JSON.parse(raw) as { v: number; docs: DocMeta[] };
+    if (parsed && parsed.v === 1 && Array.isArray(parsed.docs)) {
+      return parsed.docs;
+    }
+  } catch {
+    /* fresh install or malformed file — start empty */
+  }
+  return [];
 }
 
+function writeIndex(docs: DocMeta[]): void {
+  const tmp = `${DOCS_INDEX_PATH}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify({ v: 1, docs }, null, 2));
+  fs.renameSync(tmp, DOCS_INDEX_PATH);
+}
+
+export function listDocs(): DocMeta[] {
+  // Sort newest first so the Library renders in reverse-chronological order.
+  return readIndex().slice().sort((a, b) => b.uploadedAt - a.uploadedAt);
+}
+
+function upsertIndex(meta: DocMeta): void {
+  const docs = readIndex();
+  const idx = docs.findIndex((d) => d.id === meta.id);
+  if (idx >= 0) docs[idx] = meta;
+  else docs.push(meta);
+  writeIndex(docs);
+}
+
+function removeFromIndex(docId: string): void {
+  const docs = readIndex().filter((d) => d.id !== docId);
+  writeIndex(docs);
+}
+
+// ── Save / load / delete ───────────────────────────────────────────────
+
 export function saveDoc(entry: StoreEntry): void {
+  ensureDocDir(entry.id);
+  const meta: DocMeta = {
+    id: entry.id,
+    filename: entry.filename,
+    uploadedAt: entry.uploadedAt,
+    numPages: entry.numPages,
+  };
+  fs.writeFileSync(metaPath(entry.id), JSON.stringify(meta, null, 2));
+  fs.writeFileSync(extractedPath(entry.id), JSON.stringify(entry.extracted));
+  upsertIndex(meta);
   store.set(entry.id, entry);
 }
 
+function lazyLoadFromDisk(docId: string): StoreEntry | undefined {
+  try {
+    const meta = JSON.parse(fs.readFileSync(metaPath(docId), "utf-8")) as DocMeta;
+    const extracted = JSON.parse(
+      fs.readFileSync(extractedPath(docId), "utf-8"),
+    ) as ExtractedPdf;
+    const entry: StoreEntry = {
+      ...meta,
+      extracted,
+      pdfUrl: `/api/pdf/${docId}`,
+    };
+    store.set(docId, entry);
+    return entry;
+  } catch {
+    return undefined;
+  }
+}
+
 export function getDoc(id: string): StoreEntry | undefined {
-  return store.get(id);
+  return store.get(id) ?? lazyLoadFromDisk(id);
+}
+
+export function deleteDoc(docId: string): boolean {
+  let removed = false;
+  try {
+    fs.rmSync(docDir(docId), { recursive: true, force: true });
+    removed = true;
+  } catch {
+    /* ignore */
+  }
+  store.delete(docId);
+  removeFromIndex(docId);
+  return removed;
 }

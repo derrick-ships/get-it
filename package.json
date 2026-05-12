@@ -1,7 +1,14 @@
 {
-  "name": "braynr-app",
-  "version": "0.1.0",
+  "name": "get-it",
+  "productName": "Get It",
+  "version": "1.0.0",
+  "description": "Read it. See it. Get it. — the document-centred study companion.",
+  "author": {
+    "name": "Get It contributors"
+  },
+  "homepage": "https://github.com/beltromatti/get-it",
   "private": true,
+  "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -10,7 +17,14 @@
     "generate-pdfs": "tsx scripts/generate-sample-pdfs.ts",
     "smoke": "node scripts/smoke-test.mjs",
     "smoke-all": "node scripts/full-test.mjs",
-    "build-writeup": "node scripts/build-pdf.mjs"
+    "build-writeup": "node scripts/build-pdf.mjs",
+    "electron:dev": "concurrently -k -n next,electron -c blue,magenta \"npm run dev\" \"wait-on http://127.0.0.1:3000 && cross-env ELECTRON_RUN_AS_NODE= ELECTRON_NO_ATTACH_CONSOLE= ELECTRON_DEV_URL=http://127.0.0.1:3000 electron .\"",
+    "electron:prepare": "node scripts/electron-prepare.mjs",
+    "build:desktop": "npm run build && npm run electron:prepare && node scripts/build-electron.mjs",
+    "build:desktop:mac-arm": "npm run build && npm run electron:prepare -- --target=darwin-arm64 && node scripts/build-electron.mjs --target=mac-arm64",
+    "build:desktop:mac-x64": "npm run build && npm run electron:prepare -- --target=darwin-x64 && node scripts/build-electron.mjs --target=mac-x64",
+    "build:desktop:win-x64": "npm run build && npm run electron:prepare -- --target=win32-x64 && node scripts/build-electron.mjs --target=win-x64",
+    "build:desktop:all": "node scripts/build-electron.mjs --all"
   },
   "dependencies": {
     "@openai/codex-sdk": "^0.130.0",
@@ -37,12 +51,71 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/three": "^0.184.1",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "marked": "^14.1.4",
     "playwright": "^1.59.1",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.getit.app",
+    "productName": "Get It",
+    "directories": {
+      "buildResources": "electron/assets",
+      "output": "dist-electron"
+    },
+    "asar": true,
+    "asarUnpack": [
+      "electron/codex-bin/**",
+      ".next/standalone/**"
+    ],
+    "files": [
+      "electron/**/*",
+      ".next/standalone/**",
+      ".next/static/**",
+      "public/**",
+      "package.json",
+      "!**/.DS_Store",
+      "!**/*.map",
+      "!**/*.ts",
+      "!**/tsconfig*",
+      "!node_modules/**/.bin"
+    ],
+    "extraResources": [
+      {
+        "from": ".next/standalone/.next/static",
+        "to": "app.asar.unpacked/.next/standalone/.next/static"
+      },
+      {
+        "from": ".next/standalone/public",
+        "to": "app.asar.unpacked/.next/standalone/public"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.education",
+      "target": "dmg",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Education"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    }
   }
 }

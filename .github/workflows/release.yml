@@ -1,0 +1,119 @@
+name: Release
+
+# Triggered by pushing a version tag (e.g. v1.0.0). The job matrix builds
+# every desktop target in parallel on a native runner, uploads each
+# artifact, and at the end the publish job creates a GitHub Release tied
+# to the tag with all artifacts attached.
+#
+# We do not auto-sign Mac/Windows builds — see README → Releases for the
+# manual gatekeeper exception path. CI builds are unsigned but identical
+# in every other respect to a local build.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v1.0.0). Required for manual runs."
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS (Apple Silicon)
+            os: macos-14
+            target: mac-arm64
+            triple: darwin-arm64
+            artifact: dist-electron/*.dmg
+          - label: macOS (Intel)
+            os: macos-13
+            target: mac-x64
+            triple: darwin-x64
+            artifact: dist-electron/*.dmg
+          - label: Windows (x64)
+            os: windows-latest
+            target: win-x64
+            triple: win32-x64
+            artifact: dist-electron/*.exe
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Next.js (standalone)
+        run: npm run build
+
+      - name: Prepare standalone (sync assets, fetch codex binary for target)
+        run: node scripts/electron-prepare.mjs --target=${{ matrix.triple }}
+
+      - name: Build desktop (${{ matrix.target }})
+        env:
+          # Disable code signing in CI. Local releases ship unsigned; the
+          # README walks the user through the one-time Gatekeeper allow.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/build-electron.mjs --target=${{ matrix.target }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: getit-${{ matrix.target }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten artifact layout
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.AppImage" \) -exec cp {} release/ \;
+          ls -lh release
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Get It ${{ steps.tag.outputs.tag }}
+          generate_release_notes: true
+          files: release/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

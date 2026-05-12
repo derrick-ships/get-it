@@ -1,11 +1,15 @@
 /**
- * Tab-scoped persistence for the viewer state.
+ * Two-tier persistence for the viewer state.
  *
- * Backed by `sessionStorage` so the state survives:
- *   - F5 / browser refresh
- *   - Next.js Fast-Refresh / HMR
- *   - Browser navigation back to the viewer
- * but is naturally wiped when the tab closes (sessionStorage semantics).
+ * Tier 1 — sessionStorage (fast, tab-scoped):
+ *   Survives F5, HMR, and SPA navigation back to the viewer. Wiped when
+ *   the tab closes — that's the sessionStorage contract.
+ *
+ * Tier 2 — server (durable, cross-session, cross-device-of-same-machine):
+ *   `POST /api/tags/[docId]` is fired on every save so the Library can
+ *   restore the exact same tags / active selection / pages-analysed set
+ *   weeks later. The server file is canonical: if the tab session is
+ *   gone, the next viewer mount hydrates from the server fetch instead.
  *
  * What we persist per docId:
  *   - the full TagState[] (positions, type, label, spec, error, generating flag)
@@ -84,6 +88,55 @@ export function saveDocState(
   } catch (e) {
     // Quota exceeded or storage disabled — degrade gracefully.
     console.warn("braynr persistence: failed to save", e);
+  }
+  // Best-effort durable copy. We don't await so the snapshot UX stays
+  // instant; if the POST fails (server restarting, offline, etc.) the
+  // sessionStorage copy still keeps the user whole until the next save.
+  try {
+    void fetch(`/api/tags/${encodeURIComponent(docId)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(state),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    /* noop — even constructing the fetch can throw on Firefox private mode */
+  }
+}
+
+/**
+ * Pulls the server-persisted tag state for a doc. Used by the viewer on
+ * mount when sessionStorage is empty — e.g. the user closed the tab and
+ * is re-opening from the Library. Returns null if the server has no
+ * record (the doc was just uploaded).
+ */
+export async function fetchServerDocState(
+  docId: string,
+): Promise<PersistedDocState | null> {
+  try {
+    const r = await fetch(`/api/tags/${encodeURIComponent(docId)}`, {
+      cache: "no-store",
+    });
+    if (!r.ok) return null;
+    const j = (await r.json()) as
+      | {
+          v: 1;
+          tags: PersistedTag[];
+          activeTagId: string | null;
+          pagesAnalyzed: number[];
+          savedAt?: number;
+        }
+      | null;
+    if (!j || j.v !== VERSION) return null;
+    return {
+      v: VERSION,
+      savedAt: j.savedAt ?? Date.now(),
+      tags: j.tags,
+      activeTagId: j.activeTagId,
+      pagesAnalyzed: j.pagesAnalyzed,
+    };
+  } catch {
+    return null;
   }
 }
 

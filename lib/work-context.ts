@@ -4,14 +4,14 @@
  * Pure types live in lib/work-context-types.ts so client components can
  * import them without pulling node:fs into the browser bundle.
  *
- * One file per docId at /tmp/braynr-uploads/<docId>.workctx.json. Tools
- * append to it; the evaluator never mutates it. Append-only by convention.
+ * One file per docId at <DATA_DIR>/docs/<docId>/workctx.json (see lib/paths.ts).
+ * Tools append to it; the evaluator never mutates it. Append-only by
+ * convention.
  */
 
 import fs from "node:fs";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { UPLOADS_DIR } from "./store";
+import { ensureDocDir, workCtxPath } from "./paths";
 import type { WorkContext } from "./work-context-types";
 
 export type {
@@ -23,10 +23,6 @@ export type {
   FeynmanSession,
   WorkContext,
 } from "./work-context-types";
-
-function workCtxPath(docId: string): string {
-  return path.join(UPLOADS_DIR, `${docId}.workctx.json`);
-}
 
 export function loadWorkContext(docId: string): WorkContext {
   try {
@@ -40,6 +36,7 @@ export function loadWorkContext(docId: string): WorkContext {
 }
 
 export function saveWorkContext(ctx: WorkContext): void {
+  ensureDocDir(ctx.docId);
   fs.writeFileSync(workCtxPath(ctx.docId), JSON.stringify(ctx, null, 2));
 }
 

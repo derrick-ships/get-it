@@ -11,13 +11,13 @@
 [![Built with Codex CLI](https://img.shields.io/badge/Built%20with-Codex%20CLI-111113?style=for-the-badge&logo=openai&logoColor=white)](https://github.com/openai/codex)
 
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
+[![Electron](https://img.shields.io/badge/Electron-33-2C2C2C?logo=electron&logoColor=9FEAF9)](https://www.electronjs.org/)
 [![React 19](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Tailwind CSS 4](https://img.shields.io/badge/Tailwind-4.x-38BDF8?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
 [![Three.js](https://img.shields.io/badge/Three.js-r184-000000?logo=threedotjs&logoColor=white)](https://threejs.org)
 [![pdf.js](https://img.shields.io/badge/pdf.js-5.x-F40F02?logo=mozilla&logoColor=white)](https://mozilla.github.io/pdf.js/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](#license)
-[![Status: Demo](https://img.shields.io/badge/Status-Hackathon%20Demo-success)](#)
 
 <br />
 
@@ -48,7 +48,48 @@ We took both lines literally.
 | 🎴 **Flashcards** | AI-generated active-recall decks per topic. Type your answer, reveal, self-grade 1–4 (Again / Hard / Good / Easy, FSRS convention). Closing a deck triggers an evaluator pass. |
 | 💡 **Feynman** | The agent plays a curious 8-year-old. *You* are the teacher. Three to four short, pointed prompts; you explain in plain words; the session ends with an honest summary of where the explanation held and where it broke down. The strongest signal we have for **comprehension**. |
 | 📊 **Four-axis evaluator** | After every completed interaction, a dedicated agent reads the full work-context journal and updates per-node scores along four dimensions. Scores are **monotone non-decreasing** — the student can only progress, never regress. |
+| 📚 **Library** | Every PDF you've ever opened is one click away. Tags, chats, flashcards, Feynman sessions, knowledge graph — all picked up where you left them. Nothing leaves your machine. |
 | 📥 **Your data, downloadable** | One click in the right-pane menu pulls the entire work-context JSON — every chat message, every card rating, every Feynman turn, every timestamp. The same file the evaluator reads. |
+
+## Install (no terminal)
+
+Get It is a desktop app. **Download the installer for your machine**, double-click, follow the one-time onboarding (sign in to ChatGPT or OpenAI), and you're done.
+
+| Platform | Installer |
+|---|---|
+| macOS (Apple Silicon — M1/M2/M3/M4) | `Get It-<version>-arm64.dmg` |
+| macOS (Intel) | `Get It-<version>.dmg` |
+| Windows 10/11 (x64) | `Get It Setup <version>.exe` |
+| Linux (x64) | `Get It-<version>.AppImage` |
+
+Builds for every released version are on the **[Releases](https://github.com/beltromatti/get-it/releases)** page.
+
+### First launch: what to expect
+
+1. The **setup wizard** opens. It checks that the Codex CLI binary is present (Get It ships it for you — ~190 MB) and at the required version, then asks you to sign in. A browser tab opens for the standard ChatGPT / OpenAI OAuth flow. When you finish there, the dialog continues automatically.
+2. The main window opens on **Upload**. Drop a PDF or pick one of the five bundled sample textbooks (anatomy, classical mechanics, Italian constitution, calculus, organic chemistry) — they're already inside the app, no extra step.
+3. Switch to **Library** at any time to see every PDF you've worked on. Click one and you land exactly where you left off — same tags on the document, same chat threads, same flashcard decks, same Feynman sessions, same knowledge-graph scores.
+
+### Storage
+
+Get It stores everything on your machine — never on a server.
+
+| OS | Where your data lives |
+|---|---|
+| macOS | `~/Library/Application Support/get-it/` |
+| Windows | `%APPDATA%\get-it\` |
+| Linux | `~/.local/share/get-it/` |
+
+Layout: one folder per document under `docs/<docId>/` (source PDF + extracted text cache + tags + work context + knowledge graph), plus a `docs.json` index, a `codex-scratch/` working dir, and `logs/` for the embedded server. Deleting a doc from the Library wipes the whole folder.
+
+### macOS Gatekeeper (first launch only)
+
+The builds linked above are unsigned (we're a hackathon project — code-signing certs cost real money). The very first time you open the app, macOS will say it can't verify the developer. Two ways through:
+
+- **Easy**: Right-click on `Get It.app` → **Open** → confirm. macOS remembers your choice for every subsequent launch.
+- **CLI**: `xattr -dr com.apple.quarantine "/Applications/Get It.app"`
+
+Windows shows a similar SmartScreen warning the first time. Click **More info → Run anyway**.
 
 ## Architecture in one breath
 
@@ -63,32 +104,55 @@ upload  ─┬──► visualizer pipeline ─► concept tags + 3D / anim / fo
                                            monotone clamp on every update)
 ```
 
-Every agent — concept detection, visualization spec, kg-build, kg-evaluate, chat, flashcard generation, Feynman child, Feynman summary — is a single `codex exec` invocation through `@openai/codex-sdk`, constrained by a strict per-call JSON Schema. **Eight prompts behind one auth path. Eight schemas behind one shared SDK wrapper.** No god-prompt. No black box. The full architecture is in [`technical-writeup.md`](technical-writeup.md) (and [as a PDF](technical-writeup.pdf)).
+Every agent — concept detection, visualization spec, kg-build, kg-evaluate, chat, flashcard generation, Feynman child, Feynman summary — is a single `codex exec` invocation through `@openai/codex-sdk`, constrained by a strict per-call JSON Schema. **Eight prompts behind one auth path. Eight schemas behind one shared SDK wrapper.** No god-prompt. No black box.
 
-## Run it locally
+The desktop app is a thin Electron shell over the same Next.js 16 application that we ran in the browser at the hackathon. The shell:
 
-Get It runs on your machine, against your own Codex login, on your own PDFs. **Everything is real and works** — there is no hosted backend and no shared state. Three things are needed:
+- ships the Codex CLI binary inside the bundle so users don't install anything by hand,
+- runs a first-launch wizard that handles installation gaps and the OAuth login,
+- spawns the Next.js standalone server on a free localhost port and points a single Chromium window at it,
+- watches Codex for auth loss and rate-limit hits, and re-enters the setup wizard or shows a countdown banner without losing any work,
+- persists everything to the OS-native user-data directory.
 
-- **Node 20+**
-- The **Codex CLI** authenticated against your ChatGPT or OpenAI API account: install [openai/codex](https://github.com/openai/codex), then run `codex login` once. That is the same login `@openai/codex-sdk` uses under the hood.
-- A PDF with a real text layer (we do not OCR scans).
+The full architecture is in [`technical-writeup.md`](technical-writeup.md) (also rendered as a [PDF](technical-writeup.pdf)).
+
+## Hack on it (developer mode)
 
 ```bash
 git clone https://github.com/beltromatti/get-it.git
 cd get-it
 npm install
-cp .env.example .env        # tweak knobs if you want; defaults are fine
-npm run generate-pdfs       # one-time: build 5 sample textbooks into public/pdfs/
-npm run dev                 # http://localhost:3000
+npm run electron:dev          # runs Next dev + opens the Electron window
 ```
 
-Open the page, drop a PDF (or click any sample). Tags appear inline as the document is being read. Click any tag to inspect the visualization, or use the dropdown in the right pane header to switch into the **Knowledge Graph**, **Chat**, **Flashcards**, or **Feynman** tools. The KG status badge in the top tab bar tells you when the evaluator is working and when the next sync just landed.
+Or run just the Next side and open it in your browser:
 
-Two runtime knobs in the **Settings** popover (top-right cog) let you toggle auto-generation of visualizations and tune the visualizer's repair budget without restarting the server. They mirror `NEXT_PUBLIC_AUTO_GENERATE_VIZ` and `NEXT_PUBLIC_MAX_VIZ_GEN_RETRIES`.
+```bash
+npm run dev                   # http://localhost:3000
+```
+
+To make a desktop build locally for one or all targets:
+
+```bash
+npm run build                       # next build (creates .next/standalone)
+npm run electron:prepare            # stages public/ + static/ + host codex binary
+
+# Single target:
+node scripts/build-electron.mjs --target=mac-arm64
+node scripts/build-electron.mjs --target=mac-x64
+node scripts/build-electron.mjs --target=win-x64
+
+# All three sequentially:
+node scripts/build-electron.mjs --all
+```
+
+The artefacts land in `dist-electron/`. The cross-arch builds will fetch the matching Codex platform package from npm on the fly — you don't need an Intel Mac or a Windows VM, the script downloads what it needs.
+
+For releases, push a `vX.Y.Z` tag to `main` — the `.github/workflows/release.yml` workflow builds every target in parallel on its native runner and attaches the artefacts to a GitHub Release.
 
 ## The team
 
-Built in 24 hours at **GDG AI Hack 2026, Milan**, for the **Braynr** challenge.
+Built in 24 hours at **GDG AI Hack 2026, Milan**, for the **Braynr** challenge. The hackathon submission lived at commit `277ec43`; everything you see beyond that commit is post-hackathon polish — most notably the desktop packaging, the persistent library, and the first-launch setup wizard. The product is the same; only the way it gets onto a student's laptop has changed.
 
 - **Mattia Beltrami** — Politecnico di Milano
 - **Matteo Impieri** — Politecnico di Milano
@@ -97,7 +161,7 @@ Built in 24 hours at **GDG AI Hack 2026, Milan**, for the **Braynr** challenge.
 
 ## Want the deeper read
 
-[`technical-writeup.md`](technical-writeup.md) — the full design rationale: the four-axis rubric, the per-doc evaluator queue, the parallel visualizer agents, the LLM-code sandbox, the work-context journal, the 14 lessons from learning research that shaped the UX. Also rendered as [`technical-writeup.pdf`](technical-writeup.pdf).
+[`technical-writeup.md`](technical-writeup.md) — the full design rationale: the four-axis rubric, the per-doc evaluator queue, the parallel visualizer agents, the LLM-code sandbox, the work-context journal, the 14 lessons from learning research that shaped the UX, and the desktop-packaging layer that wraps it all. Also rendered as [`technical-writeup.pdf`](technical-writeup.pdf).
 
 ## License
 

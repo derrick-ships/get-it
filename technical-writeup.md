@@ -6,6 +6,8 @@
 
 By Mattia Beltrami (Politecnico di Milano), Matteo Impieri (Politecnico di Milano), Filippo Difronzo (Politecnico di Milano), Luca Feggi (Università di Padova).
 
+> The hackathon submission lived at commit `277ec43`. Everything you see here is that same product wrapped in a desktop shell so a student who has never opened a terminal can install it, sign in once, and have the same experience the judges saw. The product hasn't moved; the delivery has.
+
 ---
 
 ## What we built and why it exists
@@ -20,7 +22,9 @@ The macro user loop is therefore a closed cycle: the visualizer generates time-t
 
 ## System architecture
 
-The product is a single Next.js 16 application (App Router, React 19, server components for the entry points, client components for the orchestrators) deployed locally against the user's own Codex CLI. There is no proprietary model in the loop — every agent call is a `codex exec` invocation through the official `@openai/codex-sdk`, constrained by a strict per-call JSON Schema so a "concept" or a "knowledge-graph node" is always a typed object, never free text the UI has to parse defensively.
+The product is a single Next.js 16 application (App Router, React 19, server components for the entry points, client components for the orchestrators) wrapped in a small Electron shell so it ships as a desktop installer. There is no proprietary model in the loop — every agent call is a `codex exec` invocation through the official `@openai/codex-sdk`, constrained by a strict per-call JSON Schema so a "concept" or a "knowledge-graph node" is always a typed object, never free text the UI has to parse defensively.
+
+The Electron shell does four things and gets out of the way: (1) on first launch it runs a setup wizard that verifies the bundled Codex CLI binary, prompts for the OAuth sign-in if needed, and refuses to open the main window until both gates are green; (2) it spawns the Next.js standalone server as a child Node process on a free localhost port and points a single Chromium `BrowserWindow` at it — the UI is exactly the browser experience, byte-for-byte; (3) it owns the per-user data directory (OS-native paths under `Application Support` / `%APPDATA%` / `~/.local/share`) and exposes it to the Next side via `BRAYNR_DATA_DIR`; (4) it listens for Codex auth-loss or rate-limit signals and re-opens the wizard or surfaces a countdown banner without throwing away any work in flight.
 
 Two macro-pipelines run **in parallel from the moment the PDF is uploaded**:
 
@@ -76,13 +80,31 @@ Behind all three tools sits a single artifact: the **work-context JSON**, one fi
 
 ## Implementation choices we are happy with
 
-Persistent state is filesystem-backed under `/tmp/braynr-uploads/<docId>` (PDF + extracted text + work-context + KG). Process-local, cheap, recoverable, and a clear seam if we ever lift it to S3 or Postgres. Client state (tags, active selection, settings) is sessionStorage-backed so reload restores it without a server round-trip; we re-fire orchestration that died with the page (in-flight visualizations marked `generating: true` get re-enqueued on mount).
+Persistent state is filesystem-backed under one OS-native data directory per user, resolved once in [`lib/paths.ts`](lib/paths.ts) — `~/Library/Application Support/get-it/` on macOS, `%APPDATA%\get-it\` on Windows, `~/.local/share/get-it/` on Linux (or whatever the Electron main process pinned via `BRAYNR_DATA_DIR`). Layout is `docs/<docId>/{source.pdf, extracted.json, meta.json, workctx.json, kg.json, tags.json}` with a top-level `docs.json` index so the Library renders the catalog without scanning the disk. Cheap, recoverable, OS-agnostic, and a clear seam if we ever lift it to a hosted backend. Client state (tags, active selection, settings) is sessionStorage-backed for fast paint, and *also* shipped to the server on every save — re-opening a doc from the Library weeks later restores the exact tag layout, active selection and analysed-pages set without re-detection.
 
 Types are split into `*-types.ts` modules (pure TS, no `node:fs` imports) and `*.ts` modules (the actual storage helpers). This sounds pedantic until you discover that Next.js bundles a transitively-imported module into the client when *any* type from it is referenced — even a bare `import type {}`. Splitting types into a node-free file is the only way to keep `lib/kg.ts` and `lib/work-context.ts` server-only without poisoning the browser bundle. We learned that the hard way and the comments in those files say so.
 
 The visualizer sandbox runs LLM-emitted JavaScript inside a `new Function` IIFE with all dangerous globals (`window`, `document`, `fetch`, `XMLHttpRequest`, `WebSocket`, `Function`, `eval`, `localStorage`, `sessionStorage`, `require`) shadowed as `undefined` parameters. It is a defense against LLM mistakes, not a defense against adversarial input — the user runs their own Codex account against their own PDFs. The boundary is reasonable for the demo and explicitly documented.
 
 Settings (auto-generate visualizations, max viz repair attempts) are runtime-mutable from a popover in the top tab bar. Both default to the env values from `lib/config.ts` (`NEXT_PUBLIC_AUTO_GENERATE_VIZ`, `NEXT_PUBLIC_MAX_VIZ_GEN_RETRIES`) and persist to sessionStorage. Toggling auto-generate from off to on sweeps already-detected idle tags into the queue immediately; on to off lets in-flight calls finish naturally.
+
+## Resilience to Codex outages
+
+Every Codex call funnels through one helper, [`lib/codex.ts → runJson`](lib/codex.ts). That helper classifies failures into four kinds — `auth_lost`, `rate_limit` (with the 5-hour / weekly window pulled out of the error message when present), `binary_missing`, and `generic` — and writes the latest one into a process-local **health mailbox**. Two things hang off the mailbox:
+
+1. **The in-app banner.** The renderer polls `/api/codex/health` (fast cadence while there's an active problem, slow cadence otherwise) and renders [`components/CodexHealthBanner.tsx`](components/CodexHealthBanner.tsx). On auth loss it offers a "Re-connect" button that re-opens the desktop setup wizard via the Electron preload bridge. On rate-limit it counts down to `retryAt` and disappears on its own when the deadline passes.
+
+2. **The kg-evaluator queue.** Hitting a rate-limit inside an evaluator pass schedules a `setTimeout` for `retryAt + 500 ms` that re-fires `scheduleEvaluation(docId)` — so the graph keeps catching up on its own without the user having to do anything. The build agent does the same: it leaves the KG in `status: "building"` instead of erroring out, so the badge keeps spinning and the next attempt picks up cleanly. Tool routes (chat / flashcards / Feynman) preserve the work-context journal up to the failure point, so the user can re-send the same action once the banner clears and pick up exactly where they were — no lost messages, no orphan card ratings, no half-finished Feynman session.
+
+The runJson helper also short-circuits Codex calls while a rate-limit window is still active, so a chatty UI can't burn a hundred wasted calls hoping the next one will succeed. This keeps the recovery clean: one failure, one banner, and the rest of the app keeps working on cached state.
+
+## Desktop packaging
+
+The Electron shell is the boring kind of shell — it does as little as possible. [`electron/main.js`](electron/main.js) acquires a single-instance lock, normalises the user-data directory to `get-it` (we override Electron's default `Application Support/Get It` so the OS-native path matches the pure-Next dev default), runs the setup wizard, spawns the Next.js standalone server as a child Node process on a free port, and points one Chromium window at `http://127.0.0.1:<port>`. There is no native menu reinvention, no custom IPC for application data, and no second renderer — the user-visible UI is the unchanged Next.js app. We chose Electron over Tauri specifically because we wanted a guaranteed Chromium runtime on all three operating systems: Three.js scenes, KaTeX-rendered formulas, the `new Function(...)` LLM sandbox, and pdf.js fonts all behave identically on every machine the user can install on.
+
+[`electron/setup.js`](electron/setup.js) owns the Codex life-cycle. The Codex CLI binary ships *inside* the app — it's a Rust binary packaged as an npm optional dependency (`@openai/codex-<platform>-<arch>`) that the SDK locates via `createRequire`. At build time `scripts/electron-prepare.mjs` fetches the correct platform tarball from the npm registry (so a cross-arch build from an M-series Mac can still produce a usable Windows installer) and stages it under `electron/codex-bin/<triple>/codex/codex(.exe)`. At runtime the setup module resolves that path first; if for any reason it's missing or out of date, a "Install Codex CLI" button downloads it on demand into the user-data dir. The OAuth sign-in is run by spawning `codex login` and capturing the success line from stdout — the binary opens the browser itself; if it can't, the URL is also surfaced in the wizard window with an "Open in browser" button. The wizard is a stand-alone `BrowserWindow` loaded from a plain `file:///` page with its own minimal preload bridge.
+
+Multi-target builds are driven from `scripts/build-electron.mjs`. Local: `node scripts/build-electron.mjs --target=mac-arm64 | mac-x64 | win-x64 | --all`. CI: a tagged push (`v*.*.*`) to `main` triggers `.github/workflows/release.yml`, which builds each target on its native runner (`macos-14`, `macos-13`, `windows-latest`), uploads the `.dmg` / `.exe`, then a final `publish` job collects everything and creates the GitHub Release tied to the same tag. Builds are unsigned by default; users dismiss the first-launch Gatekeeper / SmartScreen warning once and it's not seen again. Real signing certificates are a deliberate choice deferred to a sustainable funding moment, not a missing piece of the architecture.
 
 ## What's out of scope and why
 
@@ -92,6 +114,6 @@ A multi-user backend, real auth, and a hosted deployment are also deliberately o
 
 ## What we want a judge to remember
 
-Three things. (1) The document is the center, and every other surface back-reflects to it — the visualizer pulls from the page text, the chat injects the page text, the evaluator reads the journal *and* the page text. (2) Mastery is four numbers and they only ever go up — that one constraint is the difference between a study app and a measurement instrument. (3) The same Codex provider drives every agent — concept detection, visualization generation, knowledge-graph build, evaluator, chat, flashcards, Feynman child, Feynman summary — eight prompts behind one auth path, eight schemas behind one shared SDK wrapper. The system is a sum of small, schema-typed turns, not a god-prompt; that is what makes it debuggable and that is what will let it grow.
+Four things. (1) The document is the center, and every other surface back-reflects to it — the visualizer pulls from the page text, the chat injects the page text, the evaluator reads the journal *and* the page text. (2) Mastery is four numbers and they only ever go up — that one constraint is the difference between a study app and a measurement instrument. (3) The same Codex provider drives every agent — concept detection, visualization generation, knowledge-graph build, evaluator, chat, flashcards, Feynman child, Feynman summary — eight prompts behind one auth path, eight schemas behind one shared SDK wrapper. (4) A student who has never opened a terminal can use this: a 200-MB installer, a one-time browser sign-in, and the same product the judges saw. The system is a sum of small, schema-typed turns, not a god-prompt; that is what makes it debuggable and that is what will let it grow.
 
 > *"Their knowledge is so fragile."* — Feynman, 1985. We took the line literally.

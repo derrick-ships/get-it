@@ -3,13 +3,12 @@
  *
  * Pure types + helpers live in lib/kg-types.ts so client components can
  * import them without bundling node:fs. This file is the disk side: load,
- * save, and the empty-state factory. Stored as a single JSON file per
- * docId at /tmp/braynr-uploads/<docId>.kg.json.
+ * save, and the empty-state factory. Stored at
+ * <DATA_DIR>/docs/<docId>/kg.json — see lib/paths.ts.
  */
 
 import fs from "node:fs";
-import path from "node:path";
-import { UPLOADS_DIR } from "./store";
+import { ensureDocDir, kgPath } from "./paths";
 import type { KnowledgeGraph } from "./kg-types";
 
 export type {
@@ -20,10 +19,6 @@ export type {
   KnowledgeGraph,
 } from "./kg-types";
 export { masteryScore } from "./kg-types";
-
-function kgPath(docId: string): string {
-  return path.join(UPLOADS_DIR, `${docId}.kg.json`);
-}
 
 export function loadKG(docId: string): KnowledgeGraph | null {
   try {
@@ -37,6 +32,7 @@ export function loadKG(docId: string): KnowledgeGraph | null {
 }
 
 export function saveKG(kg: KnowledgeGraph): void {
+  ensureDocDir(kg.docId);
   fs.writeFileSync(kgPath(kg.docId), JSON.stringify(kg, null, 2));
 }
 

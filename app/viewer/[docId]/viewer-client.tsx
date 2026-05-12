@@ -45,6 +45,7 @@ function readPersistedMaxRetries(): number {
 }
 import {
   clearDocState,
+  fetchServerDocState,
   loadDocState,
   saveDocState,
   type PersistedTag,
@@ -175,6 +176,34 @@ export default function ViewerClient({ docId }: { docId: string }) {
       console.warn("[braynr] kg/build kick failed", e);
     });
   }, [meta, docId]);
+
+  // ── Hydrate from server if sessionStorage was empty ──────────────────
+  // Re-opening a doc from the Library after a tab close lands us here
+  // with empty tags/pagesAnalyzed. Pull the canonical copy from the
+  // server before we kick off detection so we don't re-detect pages
+  // that already have tags on disk.
+  const [serverHydrated, setServerHydrated] = useState<boolean>(
+    () => persistedOnMount !== null,
+  );
+  useEffect(() => {
+    if (persistedOnMount !== null) return; // already hydrated from sessionStorage
+    if (serverHydrated) return;
+    let cancelled = false;
+    fetchServerDocState(docId).then((s) => {
+      if (cancelled || !s) {
+        if (!cancelled) setServerHydrated(true);
+        return;
+      }
+      setTags(s.tags.map(tagFromPersisted));
+      setActiveTagId(s.activeTagId);
+      setPagesAnalyzed(new Set(s.pagesAnalyzed));
+      setServerHydrated(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docId]);
 
   // ── Load document metadata from server ───────────────────────────────
   useEffect(() => {
@@ -372,6 +401,7 @@ export default function ViewerClient({ docId }: { docId: string }) {
   // ── Page-by-page concept detection (skipping any already done) ───────
   useEffect(() => {
     if (!meta) return;
+    if (!serverHydrated) return; // wait so we don't re-detect already-tagged pages
     cancelledRef.current = false;
 
     // Seed analyzedRef from the restored pagesAnalyzed so we don't re-detect.
@@ -469,7 +499,7 @@ export default function ViewerClient({ docId }: { docId: string }) {
       ctrlsRef.current = [];
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meta, docId]);
+  }, [meta, docId, serverHydrated]);
 
   // ── Resume in-flight viz generations after a reload ──────────────────
   // Tags persisted with generating=true had their fetch killed by the
@@ -639,10 +669,10 @@ export default function ViewerClient({ docId }: { docId: string }) {
             </span>
           )}
         </div>
-        <div className="tab-item">
+        <Link href="/library" className="tab-item">
           <BookOpen className="h-3.5 w-3.5 text-[var(--ink-400)]" />
           <span>Library</span>
-        </div>
+        </Link>
         <div className="ml-auto flex items-center gap-2 pr-1">
           <KGStatusBadge docId={docId} />
           <TagsChip

@@ -1,8 +1,8 @@
+import Link from "next/link";
 import UploadCard from "@/components/UploadCard";
 import {
   Upload,
   BookOpen,
-  Settings2,
   FileText,
   StickyNote,
   Bookmark,
@@ -39,15 +39,10 @@ export default function Home() {
           <Upload className="h-3.5 w-3.5 text-[var(--accent-600)]" />
           <span>Upload</span>
         </div>
-        <div className="tab-item">
+        <Link href="/library" className="tab-item">
           <BookOpen className="h-3.5 w-3.5 text-[var(--ink-400)]" />
           <span>Library</span>
-        </div>
-        <div className="ml-auto flex items-center gap-1">
-          <div className="tab-icon-btn" aria-hidden>
-            <Settings2 className="h-4 w-4" />
-          </div>
-        </div>
+        </Link>
       </div>
 
       {/* White content sheet */}

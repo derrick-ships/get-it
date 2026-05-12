@@ -13,7 +13,7 @@
  * committed to disk so the client polls /api/kg/[docId]/state to observe.
  */
 
-import { runJson } from "./codex";
+import { runJson, CodexError } from "./codex";
 import { getDoc } from "./store";
 import {
   emptyKG,
@@ -167,6 +167,21 @@ export async function buildKG(docId: string): Promise<KnowledgeGraph> {
       saveKG(kg);
       return kg;
     } catch (e) {
+      const codexErr = e instanceof CodexError ? e : null;
+      // Rate-limited or auth lost: leave the KG in "building" state and
+      // schedule a deferred retry. The status badge keeps spinning, the
+      // banner explains why; when the window clears we pick up where we
+      // were without the user having to do anything.
+      if (codexErr && (codexErr.kind === "rate_limit" || codexErr.kind === "auth_lost")) {
+        if (codexErr.kind === "rate_limit" && codexErr.retryAt) {
+          const wait = Math.max(1000, codexErr.retryAt - Date.now() + 500);
+          setTimeout(() => {
+            buildInFlight.delete(docId);
+            buildKG(docId).catch(() => {});
+          }, wait);
+        }
+        throw e;
+      }
       const errored: KnowledgeGraph = {
         ...placeholder,
         status: "error",
@@ -277,6 +292,7 @@ function clampMonotone(prev: KGEvaluation, next: KGEvaluation): KGEvaluation {
 
 const evalInFlight = new Map<string, Promise<void>>();
 const evalPending = new Map<string, boolean>();
+const evalDeferredTimers = new Map<string, NodeJS.Timeout>();
 
 /** Whether an evaluation pass is currently running for this doc. Used by
  *  the state route so the client can render a live "evaluating" indicator
@@ -299,10 +315,28 @@ export function scheduleEvaluation(docId: string): void {
     try {
       await runEvaluation(docId);
     } catch (e) {
+      const err = e instanceof CodexError ? e : null;
       console.warn("[kg-eval]", docId, (e as Error).message);
+      // Rate-limited: defer a retry until the window expires. We hold an
+      // intent (pending=true) so the next genuine interaction wakes us
+      // up, but we also schedule a timer so progress resumes on its own
+      // even if the user does nothing.
+      if (err && err.kind === "rate_limit" && err.retryAt) {
+        const wait = Math.max(1000, err.retryAt - Date.now() + 500);
+        const existing = evalDeferredTimers.get(docId);
+        if (existing) clearTimeout(existing);
+        evalDeferredTimers.set(
+          docId,
+          setTimeout(() => {
+            evalDeferredTimers.delete(docId);
+            scheduleEvaluation(docId);
+          }, wait),
+        );
+        evalPending.set(docId, true);
+      }
     } finally {
       evalInFlight.delete(docId);
-      if (evalPending.get(docId)) {
+      if (evalPending.get(docId) && !evalDeferredTimers.has(docId)) {
         evalPending.delete(docId);
         scheduleEvaluation(docId);
       }

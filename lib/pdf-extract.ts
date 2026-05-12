@@ -43,7 +43,13 @@ export async function extractPdf(buffer: ArrayBuffer | Uint8Array): Promise<Extr
     data,
     useSystemFonts: true,
     disableFontFace: true,
-  }).promise;
+    // We're already on Node (server-side). Don't try to spawn a Web
+    // Worker — in the Next standalone build the worker .mjs is not
+    // emitted alongside the main module, and pdfjs falls over with
+    // "Setting up fake worker failed". Running in-process is fine for
+    // our PDF sizes (textbook samples + user uploads up to ~20 MB).
+    disableWorker: true,
+  } as Parameters<typeof getDocument>[0]).promise;
 
   const pages: PdfPage[] = [];
   for (let p = 1; p <= pdf.numPages; p++) {

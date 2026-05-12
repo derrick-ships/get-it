@@ -5,38 +5,72 @@
  *     - sample: <name>        (when picking one of /public/pdfs/<name>.pdf)
  *
  * Returns: { docId, numPages, pages: [{ pageIndex, width, height, text }], pdfUrl }
+ *
+ * Sample idempotency: clicking the same sample twice returns the same
+ * docId so the user's KG / chats / flashcards survive a back-and-forth.
+ * Real uploads always mint a new docId — students who genuinely re-upload
+ * the same file get a new entry and can delete duplicates from Library.
  */
 
 import { NextResponse } from "next/server";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { extractPdf } from "@/lib/pdf-extract";
-import { newDocId, pdfPath, saveDoc } from "@/lib/store";
+import { ensureDocDir, pdfPath } from "@/lib/paths";
+import { getDoc, newDocId, saveDoc } from "@/lib/store";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+const SAMPLE_NAME_TO_DOC_ID: Record<string, string> = {
+  anatomy: "sample-anatomy",
+  physics: "sample-physics",
+  costituzione: "sample-costituzione",
+  calculus: "sample-calculus",
+  chemistry: "sample-chemistry",
+};
+
 export async function POST(req: Request) {
   let buffer: Buffer;
   let filename = "uploaded.pdf";
+  let presetDocId: string | null = null;
 
   const ct = req.headers.get("content-type") || "";
   if (ct.includes("multipart/form-data")) {
     const form = await req.formData();
     const sample = form.get("sample");
     if (typeof sample === "string" && sample) {
-      // Picking from public/pdfs/<sample>.pdf
       const safe = sample.replace(/[^a-z0-9-]/gi, "");
+      const sampleDocId = SAMPLE_NAME_TO_DOC_ID[safe];
+      if (!sampleDocId) {
+        return NextResponse.json({ error: "unknown sample" }, { status: 400 });
+      }
+      // Already in the library? Reuse it.
+      const existing = getDoc(sampleDocId);
+      if (existing) {
+        return NextResponse.json({
+          docId: existing.id,
+          filename: existing.filename,
+          pdfUrl: existing.pdfUrl,
+          numPages: existing.extracted.numPages,
+          pages: existing.extracted.pages.map((p) => ({
+            pageIndex: p.pageIndex,
+            width: p.width,
+            height: p.height,
+            text: p.text,
+          })),
+        });
+      }
       const p = path.join(process.cwd(), "public", "pdfs", `${safe}.pdf`);
       buffer = await fs.readFile(p);
       filename = `${safe}.pdf`;
+      presetDocId = sampleDocId;
     } else {
       const file = form.get("file");
       if (!(file instanceof Blob)) {
         return NextResponse.json({ error: "no file" }, { status: 400 });
       }
       buffer = Buffer.from(await file.arrayBuffer());
-      // 'name' is on File but not Blob in TS; defensively check.
       const fname = (file as unknown as { name?: string }).name;
       if (fname) filename = fname.replace(/[^a-z0-9._-]/gi, "_");
     }
@@ -49,7 +83,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "not a PDF" }, { status: 400 });
   }
 
-  const docId = newDocId();
+  const docId = presetDocId ?? newDocId();
+  ensureDocDir(docId);
   await fs.writeFile(pdfPath(docId), buffer);
 
   // pdf.js refuses Buffer instances; copy to a plain Uint8Array.
@@ -62,6 +97,7 @@ export async function POST(req: Request) {
     id: docId,
     filename,
     uploadedAt: Date.now(),
+    numPages: extracted.numPages,
     extracted,
     pdfUrl,
   });

@@ -42,3 +42,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# electron build output
+/dist-electron/
+# staged codex binary per target — fetched on demand by electron-prepare
+/electron/codex-bin/
