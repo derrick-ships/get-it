@@ -50,10 +50,31 @@ export type FeynmanSession = {
   summary?: string;
 };
 
+/** One multiple-choice quiz question. Options always have length 4, and
+ *  `correctIndex` is in 0..3. After the student picks, `chosenIndex` and
+ *  `answeredAt` are set; cards stay write-once (no editing past answers). */
+export type QuizQuestion = {
+  stem: string;
+  options: string[];
+  correctIndex: number;
+  explanation: string;
+  chosenIndex?: number;
+  answeredAt?: number;
+};
+
+export type QuizSession = {
+  id: string;
+  topic: string;
+  createdAt: number;
+  endedAt?: number;
+  questions: QuizQuestion[];
+};
+
 export type WorkContext = {
   v: 1;
   docId: string;
   chats: ChatThread[];
   flashcards: FlashcardSession[];
+  quizzes: QuizSession[];
   feynman: FeynmanSession[];
 };

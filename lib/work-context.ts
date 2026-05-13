@@ -21,18 +21,31 @@ export type {
   FlashcardSession,
   FeynmanTurn,
   FeynmanSession,
+  QuizQuestion,
+  QuizSession,
   WorkContext,
 } from "./work-context-types";
 
 export function loadWorkContext(docId: string): WorkContext {
   try {
     const raw = fs.readFileSync(workCtxPath(docId), "utf-8");
-    const parsed = JSON.parse(raw) as WorkContext;
-    if (parsed && parsed.v === 1) return parsed;
+    const parsed = JSON.parse(raw) as Partial<WorkContext> & { v?: number };
+    if (parsed && parsed.v === 1) {
+      // Back-fill arrays that were added after a doc's first save so
+      // pre-existing journals load cleanly into the new shape.
+      return {
+        v: 1,
+        docId: parsed.docId ?? docId,
+        chats: parsed.chats ?? [],
+        flashcards: parsed.flashcards ?? [],
+        quizzes: parsed.quizzes ?? [],
+        feynman: parsed.feynman ?? [],
+      };
+    }
   } catch {
     /* file missing or malformed — start fresh */
   }
-  return { v: 1, docId, chats: [], flashcards: [], feynman: [] };
+  return { v: 1, docId, chats: [], flashcards: [], quizzes: [], feynman: [] };
 }
 
 export function saveWorkContext(ctx: WorkContext): void {
@@ -74,6 +87,35 @@ export function summariseForEvaluator(ctx: WorkContext): string {
         const r = card.rating ?? "—";
         const ua = card.userAnswer ? ` user="${card.userAnswer.slice(0, 200)}"` : "";
         lines.push(`- Q: ${card.q.slice(0, 200)} | A: ${card.a.slice(0, 200)} | rating=${r}${ua}`);
+      }
+    }
+  }
+
+  if (ctx.quizzes.length) {
+    lines.push("\n# QUIZZES");
+    for (const s of ctx.quizzes) {
+      const status = s.endedAt ? "ended" : "in-progress";
+      const answered = s.questions.filter((q) => q.chosenIndex != null).length;
+      const correct = s.questions.filter(
+        (q) => q.chosenIndex != null && q.chosenIndex === q.correctIndex,
+      ).length;
+      lines.push(
+        `\n## quiz "${s.topic}" (id=${s.id}, ${status}, ${answered}/${s.questions.length} answered, ${correct} correct)`,
+      );
+      for (const q of s.questions) {
+        const picked = q.chosenIndex != null ? q.options[q.chosenIndex] : null;
+        const right = q.options[q.correctIndex];
+        const verdict =
+          q.chosenIndex == null
+            ? "unanswered"
+            : q.chosenIndex === q.correctIndex
+              ? "correct"
+              : "incorrect";
+        lines.push(`- Q: ${q.stem.slice(0, 240)}`);
+        lines.push(`  correct: ${right.slice(0, 160)}`);
+        lines.push(
+          `  student: ${picked ? picked.slice(0, 160) : "(no answer)"} → ${verdict}`,
+        );
       }
     }
   }

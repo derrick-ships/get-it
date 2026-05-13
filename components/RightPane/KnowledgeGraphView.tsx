@@ -27,7 +27,7 @@ type Props = {
    * Called when the user clicks a node-action shortcut (e.g. "chat about this
    * concept"). Lets the right pane switch mode and jump straight in.
    */
-  onJumpToTool?: (tool: "chat" | "flashcards" | "feynman", topic: string) => void;
+  onJumpToTool?: (tool: "chat" | "flashcards" | "quizzes" | "feynman", topic: string) => void;
 };
 
 export default function KnowledgeGraphView({ docId, onJumpToTool }: Props) {
@@ -1194,7 +1194,7 @@ function NodeOverlay({
 }: {
   node: KGNode;
   onClose: () => void;
-  onJumpToTool?: (tool: "chat" | "flashcards" | "feynman", topic: string) => void;
+  onJumpToTool?: (tool: "chat" | "flashcards" | "quizzes" | "feynman", topic: string) => void;
 }) {
   // Close on Escape.
   useEffect(() => {
@@ -1266,14 +1266,14 @@ function NodeOverlay({
           <p className="text-[12.5px] leading-relaxed text-[var(--ink-700)]">
             {node.evaluatorNote || (
               <span className="text-[var(--ink-400)]">
-                No evaluator note yet — interact with this concept (chat, flashcards, or feynman)
-                and an updated note will appear here.
+                No evaluator note yet — interact with this concept (chat, flashcards, quizzes, or
+                feynman) and an updated note will appear here.
               </span>
             )}
           </p>
         </div>
 
-        <footer className="grid grid-cols-3 gap-1.5 border-t border-[var(--border-subtle)] bg-[var(--surface-canvas)] p-2.5">
+        <footer className="grid grid-cols-4 gap-1.5 border-t border-[var(--border-subtle)] bg-[var(--surface-canvas)] p-2.5">
           <button
             type="button"
             onClick={() => onJumpToTool?.("chat", node.label)}
@@ -1287,6 +1287,13 @@ function NodeOverlay({
             className="rounded-md border border-[var(--border-subtle)] bg-white px-2 py-1.5 text-[11.5px] font-medium text-[var(--ink-700)] hover:bg-[var(--surface-sunken)] hover:text-[var(--ink-900)]"
           >
             Flashcards
+          </button>
+          <button
+            type="button"
+            onClick={() => onJumpToTool?.("quizzes", node.label)}
+            className="rounded-md border border-[var(--border-subtle)] bg-white px-2 py-1.5 text-[11.5px] font-medium text-[var(--ink-700)] hover:bg-[var(--surface-sunken)] hover:text-[var(--ink-900)]"
+          >
+            Quizzes
           </button>
           <button
             type="button"

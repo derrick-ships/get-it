@@ -203,30 +203,38 @@ export async function buildKG(docId: string): Promise<KnowledgeGraph> {
 
 const EVALUATE_SYSTEM = `You are Get It.'s evaluator agent. You score how
 well a student has mastered each concept in a knowledge graph based on
-their actual interactions with three learning tools (chat, flashcards,
-Feynman).
+their actual interactions with four learning tools (chat, flashcards,
+quizzes, Feynman).
 
 You must score, per concept, four 0–100 parameters:
 
   MEMORY — does the student RECALL the concept?
-    • Use flashcard ratings (1=again, 4=easy), recall in chat, references
+    • Use flashcard self-ratings (1=again, 4=easy), quiz correctness on
+      definitional / fact-recall questions, recall in chat, references
       across days. Recall over time > recall in the moment.
 
   COMPREHENSION — does the student understand it in their OWN WORDS?
     • Look at chat paraphrases, Feynman explanations. Verbatim repetition
       of the source = low. Original metaphors / lay-language re-explanations
       that match the substance = high. The Feynman "explain it to a child"
-      step is the strongest signal here.
+      step is the strongest signal here. A correct quiz answer where the
+      student would have been fooled by a plausible distractor is also a
+      comprehension signal — it shows they can tell siblings apart, not
+      just recognise the right word.
 
   STRUCTURE — does the student grasp how this concept CONNECTS to others?
     • Look for cause-effect chains, references to prerequisites, comparisons
       with sibling concepts. Isolated factoids = low. Multi-step reasoning
-      that bridges concepts = high.
+      that bridges concepts = high. Quizzes that pit a concept against its
+      sibling and the student picks the right one are mild structure
+      evidence.
 
   APPLICATION — does the student TRANSFER the concept to new cases?
     • Look for original examples, edge cases the student invented, problem
       solving on novel scenarios. Solving textbook-clone problems alone =
-      moderate. Spontaneously generating new cases = high.
+      moderate. Spontaneously generating new cases = high. Quiz questions
+      that pose a fresh scenario (not a definition) and the student answers
+      correctly are real application evidence.
 
 CRITICAL RULES
 1. Scores are MONOTONE NON-DECREASING across evaluations — a student can
@@ -235,9 +243,9 @@ CRITICAL RULES
    evidence.
 2. Be RIGOROUS. Quantity of interactions does NOT entitle a high score —
    only quality of evidence does. A student who has done 50 flashcards but
-   rates them all "again" should sit very low on memory; a student who has
-   given a single brilliant Feynman explanation can earn a strong jump on
-   comprehension for that concept.
+   rates them all "again", or who has scored 1/8 on every quiz, should sit
+   very low on memory; a student who has given a single brilliant Feynman
+   explanation can earn a strong jump on comprehension for that concept.
 3. Only emit updates for concepts that have observable evidence in the
    work context. Concepts with no evidence are silently kept at 0 / their
    previous level.
@@ -351,7 +359,10 @@ async function runEvaluation(docId: string): Promise<void> {
   const workCtx = loadWorkContext(docId);
 
   const hasInteractions =
-    workCtx.chats.length > 0 || workCtx.flashcards.length > 0 || workCtx.feynman.length > 0;
+    workCtx.chats.length > 0 ||
+    workCtx.flashcards.length > 0 ||
+    workCtx.quizzes.length > 0 ||
+    workCtx.feynman.length > 0;
   if (!hasInteractions) return;
 
   const promptText = evaluatePrompt(kg, summariseForEvaluator(workCtx));

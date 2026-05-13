@@ -31,7 +31,7 @@
 
 Students already have the PDF. They don't need another summary. They need to **see** the parts of the document that text alone refuses to explain, and they need to **prove to themselves** that they have understood — concept by concept, not page by page. Today that proof is missing: flashcard ratings measure recall in the moment, mindmaps measure how much you drew, summaries measure how patient the AI was. None of these answer the only question that matters on exam day: *would I survive a question I have not seen before?*
 
-Get It. is the layer that answers it. Drop a PDF. Watch the document tag itself with the concepts that benefit from a picture; watch the right pane fill in with 3D models, animations, formulas with derivations, plotted graphs, and cited sources. Open the **Knowledge Graph**, see the document's own backbone laid out as a concept map, every node carrying four scores: **memory, comprehension, structure, application**. Talk to the document in **chat**. Run yourself through an **active-recall deck**. Or — the showpiece — explain a topic to a curious eight-year-old in a **Feynman session** and watch your mastery scores rise as you teach. Every interaction feeds one journal; one evaluator agent reads that journal and back-reflects four numbers per concept onto the graph. The student becomes visible to themselves.
+Get It. is the layer that answers it. Drop a PDF. Watch the document tag itself with the concepts that benefit from a picture; watch the right pane fill in with 3D models, animations, formulas with derivations, plotted graphs, and cited sources. Open the **Knowledge Graph**, see the document's own backbone laid out as a concept map, every node carrying four scores: **memory, comprehension, structure, application**. Talk to the document in **chat**. Run yourself through an **active-recall deck**, or a **forced-choice quiz** that pits the right answer against plausible distractors. Or — the showpiece — explain a topic to a curious eight-year-old in a **Feynman session** and watch your mastery scores rise as you teach. Every interaction feeds one journal; one evaluator agent reads that journal and back-reflects four numbers per concept onto the graph. The student becomes visible to themselves.
 
 > *"Their knowledge is so fragile."* — Richard Feynman, 1985.<br />
 > *"What I cannot create, I do not understand."* — Richard Feynman, last blackboard at Caltech, 1988.
@@ -46,10 +46,11 @@ We took both lines literally.
 | 🧭 **Knowledge Graph** | A concept map of the document, built once at upload by a dedicated kg-build agent. Nodes are sized by mastery, colored by progress, clickable for the four-axis breakdown plus the evaluator's per-concept note. The macro learning path is right there on screen. |
 | 💬 **Chat** | Multi-turn, multi-thread Q&A grounded in the document. Every assistant reply triggers a debounced re-evaluation of the knowledge graph. |
 | 🎴 **Flashcards** | AI-generated active-recall decks per topic. Type your answer, reveal, self-grade 1–4 (Again / Hard / Good / Easy, FSRS convention). Closing a deck triggers an evaluator pass. |
+| ✅ **Quizzes** | Forced-choice multiple-choice quizzes per topic. Four options per question — one right, three plausible distractors crafted to expose the confusion the student would actually trip on. Each pick reveals an explanation; ending the quiz triggers an evaluator pass. |
 | 💡 **Feynman** | The agent plays a curious 8-year-old. *You* are the teacher. Three to four short, pointed prompts; you explain in plain words; the session ends with an honest summary of where the explanation held and where it broke down. The strongest signal we have for **comprehension**. |
 | 📊 **Four-axis evaluator** | After every completed interaction, a dedicated agent reads the full work-context journal and updates per-node scores along four dimensions. Scores are **monotone non-decreasing** — the student can only progress, never regress. |
-| 📚 **Library** | Every PDF you've ever opened is one click away. Tags, chats, flashcards, Feynman sessions, knowledge graph — all picked up where you left them. Nothing leaves your machine. |
-| 📥 **Your data, downloadable** | One click in the right-pane menu pulls the entire work-context JSON — every chat message, every card rating, every Feynman turn, every timestamp. The same file the evaluator reads. |
+| 📚 **Library** | Every PDF you've ever opened is one click away. Tags, chats, flashcards, quizzes, Feynman sessions, knowledge graph — all picked up where you left them. Nothing leaves your machine. |
+| 📥 **Your data, downloadable** | One click in the right-pane menu pulls the entire work-context JSON — every chat message, every card rating, every quiz answer, every Feynman turn, every timestamp. The same file the evaluator reads. |
 
 ## Install (no terminal)
 
@@ -66,7 +67,7 @@ Builds for every released version are on the **[Releases](https://github.com/bel
 
 ### First launch
 
-Sign in to your **ChatGPT or OpenAI** account once — that's the only setup. Drop a PDF in, or pick one of the five bundled samples (anatomy, classical mechanics, Italian constitution, calculus, organic chemistry). Tags, chats, flashcard decks, Feynman sessions, knowledge graph: all stay on your computer, never on a server. Come back tomorrow and **Library** has every PDF you've opened, picked up exactly where you left them.
+Sign in to your **ChatGPT or OpenAI** account once — that's the only setup. Drop a PDF in, or pick one of the five bundled samples (anatomy, classical mechanics, Italian constitution, calculus, organic chemistry). Tags, chats, flashcard decks, quizzes, Feynman sessions, knowledge graph: all stay on your computer, never on a server. Come back tomorrow and **Library** has every PDF you've opened, picked up exactly where you left them.
 
 Get It. checks for a newer release on every launch and offers a one-click update — nothing to subscribe to, nothing to babysit.
 
@@ -104,7 +105,7 @@ upload  ─┬──► visualizer pipeline ─► concept tags + 3D / anim / fo
                                            monotone clamp on every update)
 ```
 
-Every agent — concept detection, visualization spec, kg-build, kg-evaluate, chat, flashcard generation, Feynman child, Feynman summary — is a single `codex exec` invocation through `@openai/codex-sdk`, constrained by a strict per-call JSON Schema. **Eight prompts behind one auth path. Eight schemas behind one shared SDK wrapper.** No god-prompt. No black box.
+Every agent — concept detection, visualization spec, kg-build, kg-evaluate, chat, flashcard generation, quiz generation, Feynman child, Feynman summary — is a single `codex exec` invocation through `@openai/codex-sdk`, constrained by a strict per-call JSON Schema. **Nine prompts behind one auth path. Nine schemas behind one shared SDK wrapper.** No god-prompt. No black box.
 
 Detection and per-tag visualization generation aren't renderer loops — they're first-class **server-side jobs**, singleton-per-doc and idempotent. Open a PDF, navigate to Library, open another PDF, leave the window minimised: every doc you've touched keeps its agents running in the background, library badges update live, and you can come back hours later to find work finished without re-doing anything. Multiple PDFs progress in parallel.
 

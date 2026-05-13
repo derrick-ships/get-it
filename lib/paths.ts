@@ -19,7 +19,7 @@
  *     docs/<docId>/source.pdf         — original PDF bytes
  *     docs/<docId>/meta.json          — { id, filename, uploadedAt, numPages }
  *     docs/<docId>/extracted.json     — cached pdf-extract output
- *     docs/<docId>/workctx.json       — chat / flashcards / feynman journal
+ *     docs/<docId>/workctx.json       — chat / flashcards / quizzes / feynman journal
  *     docs/<docId>/kg.json            — knowledge graph
  *     docs/<docId>/tags.json          — server-side persisted visualizer tags
  *     codex-scratch/                  — codex CLI's per-call working dir

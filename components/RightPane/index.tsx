@@ -4,12 +4,13 @@
  * Right-pane shell.
  *
  * Replaces the dedicated Visualizer pane with a multi-tool surface.
- * The header carries a dropdown that switches between five tools:
+ * The header carries a dropdown that switches between six tools:
  *
  *   - Visualizer       (the original concept-renderer; per-tag click)
  *   - Knowledge Graph  (concept map + evaluation scores)
  *   - Chat             (multi-turn, multi-thread Q&A)
  *   - Flashcards       (active recall decks with self-grading)
+ *   - Quizzes          (forced-choice multiple-choice quizzes)
  *   - Feynman          (plain-language explanation questions, 4 turns)
  *
  * The Visualizer view is essentially the original component, lifted into
@@ -21,6 +22,7 @@ import {
   Sigma,
   MessageSquare,
   Layers,
+  ListChecks,
   Network,
   Lightbulb,
   ChevronDown,
@@ -45,9 +47,16 @@ import {
 import KnowledgeGraphView from "./KnowledgeGraphView";
 import ChatView from "./ChatView";
 import FlashcardsView from "./FlashcardsView";
+import QuizzesView from "./QuizzesView";
 import FeynmanView from "./FeynmanView";
 
-export type RightPaneMode = "visualizer" | "graph" | "chat" | "flashcards" | "feynman";
+export type RightPaneMode =
+  | "visualizer"
+  | "graph"
+  | "chat"
+  | "flashcards"
+  | "quizzes"
+  | "feynman";
 
 const MODES: Array<{
   id: RightPaneMode;
@@ -78,6 +87,12 @@ const MODES: Array<{
     label: "Flashcards",
     Icon: Layers,
     description: "Active-recall decks with self-grading",
+  },
+  {
+    id: "quizzes",
+    label: "Quizzes",
+    Icon: ListChecks,
+    description: "Forced-choice multiple-choice quizzes with explanations",
   },
   {
     id: "feynman",
@@ -126,7 +141,7 @@ export default function RightPane({ docId, mode, onModeChange, visualizer }: Pro
           <KnowledgeGraphView
             docId={docId}
             onJumpToTool={(tool, topic) => {
-              onModeChange(tool === "chat" ? "chat" : tool === "flashcards" ? "flashcards" : "feynman");
+              onModeChange(tool);
               // Pre-fill is handled inside each tool via sessionStorage hint.
               try {
                 window.sessionStorage.setItem(
@@ -141,6 +156,7 @@ export default function RightPane({ docId, mode, onModeChange, visualizer }: Pro
         )}
         {mode === "chat" && <ChatView docId={docId} />}
         {mode === "flashcards" && <FlashcardsView docId={docId} />}
+        {mode === "quizzes" && <QuizzesView docId={docId} />}
         {mode === "feynman" && <FeynmanView docId={docId} />}
       </div>
 
@@ -359,8 +375,8 @@ function Header({
                     {downloading ? "Preparing download…" : "Download work context (JSON)"}
                   </p>
                   <p className="text-[11px] leading-relaxed text-[var(--ink-500)]">
-                    Your full interaction journal — chats, flashcards, Feynman sessions — exactly as
-                    the evaluator sees it right now.
+                    Your full interaction journal — chats, flashcards, quizzes, Feynman sessions —
+                    exactly as the evaluator sees it right now.
                   </p>
                 </div>
               </button>

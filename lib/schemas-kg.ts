@@ -144,6 +144,46 @@ export type FlashcardsGenerateResult = {
   cards: Array<{ q: string; a: string }>;
 };
 
+// ── Quizzes: deck generation ───────────────────────────────────────────
+
+export const quizGenerateSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["questions"],
+  properties: {
+    questions: {
+      type: "array",
+      minItems: 4,
+      maxItems: 10,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["stem", "options", "correctIndex", "explanation"],
+        properties: {
+          stem: { type: "string", minLength: 8, maxLength: 320 },
+          options: {
+            type: "array",
+            minItems: 4,
+            maxItems: 4,
+            items: { type: "string", minLength: 1, maxLength: 240 },
+          },
+          correctIndex: { type: "integer", minimum: 0, maximum: 3 },
+          explanation: { type: "string", minLength: 4, maxLength: 500 },
+        },
+      },
+    },
+  },
+} as const;
+
+export type QuizGenerateResult = {
+  questions: Array<{
+    stem: string;
+    options: string[];
+    correctIndex: number;
+    explanation: string;
+  }>;
+};
+
 // ── Feynman: child prompt + (optional) end-of-session summary ──────────
 
 export const feynmanChildPromptSchema = {

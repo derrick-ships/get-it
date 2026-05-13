@@ -7,7 +7,8 @@
  * Returns: { docId, numPages, pages: [{ pageIndex, width, height, text }], pdfUrl }
  *
  * Sample idempotency: clicking the same sample twice returns the same
- * docId so the user's KG / chats / flashcards survive a back-and-forth.
+ * docId so the user's KG / chats / flashcards / quizzes / feynman sessions
+ * survive a back-and-forth.
  * Real uploads always mint a new docId — students who genuinely re-upload
  * the same file get a new entry and can delete duplicates from Library.
  */

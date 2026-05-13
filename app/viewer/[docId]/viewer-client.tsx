@@ -581,7 +581,7 @@ function KGStatusBadge({ docId }: { docId: string }) {
     icon = <Network className="h-3 w-3 text-[var(--ink-400)]" />;
     label = "No evaluations yet";
     tone = "text-[var(--ink-500)]";
-    title = "Interact with chat / flashcards / feynman to start the evaluator";
+    title = "Interact with chat / flashcards / quizzes / feynman to start the evaluator";
   } else if (state.status === "ready" && state.lastEvaluatedAt) {
     icon = <Network className="h-3 w-3 text-emerald-600" />;
     label = `Synced ${humaniseAgo(state.lastEvaluatedAt)}`;
@@ -602,7 +602,7 @@ function KGStatusBadge({ docId }: { docId: string }) {
       <span className="viz-tooltip" role="tooltip">
         Knowledge-graph agent —{" "}
         {title ||
-          "tracks per-concept mastery from your chats, flashcards and Feynman sessions."}
+          "tracks per-concept mastery from your chats, flashcards, quizzes and Feynman sessions."}
       </span>
     </span>
   );

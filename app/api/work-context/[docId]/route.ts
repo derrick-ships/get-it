@@ -2,8 +2,9 @@
  * GET /api/work-context/[docId]
  *
  * Returns the raw work-context JSON for a doc — the full journal of every
- * chat message, flashcard rating, and Feynman turn. Used by the right-pane
- * "Download work context" menu so the user can pull their own data out.
+ * chat message, flashcard rating, quiz answer, and Feynman turn. Used by
+ * the right-pane "Download work context" menu so the user can pull their
+ * own data out.
  *
  * If the user has never interacted with a tool, returns the empty default
  * shape so the download is still well-formed.

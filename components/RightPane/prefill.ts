@@ -10,7 +10,7 @@ const KEY = (docId: string) => `getit:${docId}:tool-prefill`;
 const TTL_MS = 30_000;
 
 export type ToolPrefill = {
-  tool: "chat" | "flashcards" | "feynman";
+  tool: "chat" | "flashcards" | "quizzes" | "feynman";
   topic: string;
   ts: number;
 };

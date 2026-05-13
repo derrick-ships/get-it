@@ -172,8 +172,8 @@ export default function LibraryClient() {
           </h1>
           <p className="mt-3 max-w-2xl text-[14px] leading-[1.65] text-[var(--ink-700)]">
             Every PDF you&apos;ve opened lives here. Click any row to jump back
-            in — your tags, chats, flashcards, Feynman sessions and knowledge
-            graph are all still there.
+            in — your tags, chats, flashcards, quizzes, Feynman sessions and
+            knowledge graph are all still there.
           </p>
 
           {error && (
