@@ -9,12 +9,8 @@ import {
   AlertCircle,
   MousePointerClick,
   BookOpen,
-  Settings2,
-  RotateCcw,
   Tag as TagIcon,
   Network,
-  LogOut,
-  User as UserIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -27,7 +23,6 @@ import type { DetectedConcept, VizSpec, VizType } from "@/lib/schemas";
 import { AUTO_GENERATE_VIZ, MAX_VIZ_GEN_RETRIES } from "@/lib/config";
 
 import {
-  clearDocState,
   fetchServerDocState,
   loadDocState,
   saveDocState,
@@ -598,11 +593,6 @@ export default function ViewerClient({ docId }: { docId: string }) {
     [tags, enqueueTagForGen],
   );
 
-  const handleResetCache = useCallback(() => {
-    clearDocState(docId);
-    window.location.reload();
-  }, [docId]);
-
   // When the user flips auto-generate from off to on mid-session, sweep
   // any idle tags into the queue so they don't sit there waiting for a
   // click. Off→on transitions are detected by comparing against a ref.
@@ -669,14 +659,6 @@ export default function ViewerClient({ docId }: { docId: string }) {
               <MousePointerClick className="h-2.5 w-2.5" /> manual
             </span>
           )}
-          {restoredFromCache && (
-            <span
-              className="inline-flex items-center gap-1 rounded-md border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-sky-700"
-              title="State restored from this tab's session"
-            >
-              restored
-            </span>
-          )}
         </div>
         <TooltipChip tip="Your library of opened PDFs.">
           <Link href="/library" aria-label="Open library" className="tab-item">
@@ -694,16 +676,6 @@ export default function ViewerClient({ docId }: { docId: string }) {
             tagsTotal={tags.length}
             generating={tagGeneratingCount > 0}
           />
-          <TooltipChip tip="Forget cached state for this document and re-detect from scratch.">
-            <button
-              type="button"
-              onClick={handleResetCache}
-              aria-label="Reset cached state for this document"
-              className="tab-icon-btn"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-            </button>
-          </TooltipChip>
           <SettingsButton />
           <AccountButton />
         </div>
