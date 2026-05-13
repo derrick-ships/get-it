@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  ArrowLeft,
   FileText,
   RefreshCw,
   AlertCircle,
   MousePointerClick,
+  Upload,
   BookOpen,
   Tag as TagIcon,
   Network,
@@ -356,11 +356,20 @@ export default function ViewerClient({ docId }: { docId: string }) {
 
   return (
     <div className="flex flex-1 min-h-0 flex-col bg-[var(--surface-canvas)]">
-      {/* Top tab bar */}
-      <div className="tab-bar shrink-0">
-        <TooltipChip tip="Back to upload">
-          <Link href="/" aria-label="Back to upload" className="tab-icon-btn">
-            <ArrowLeft className="h-3.5 w-3.5" />
+      {/* Top tab bar — Upload + Library pinned on the left, then the
+          open-document tab (acts as the active "window"). Clicking
+          Upload or Library navigates away, closing this doc tab. */}
+      <div className="tab-bar tab-bar--fused shrink-0">
+        <TooltipChip tip="Upload a new PDF.">
+          <Link href="/" aria-label="Upload" className="tab-item">
+            <Upload className="h-3.5 w-3.5 text-[var(--ink-400)]" />
+            <span>Upload</span>
+          </Link>
+        </TooltipChip>
+        <TooltipChip tip="Your library of opened PDFs.">
+          <Link href="/library" aria-label="Open library" className="tab-item">
+            <BookOpen className="h-3.5 w-3.5 text-[var(--ink-400)]" />
+            <span>Library</span>
           </Link>
         </TooltipChip>
         <div className="tab-item" data-active="true">
@@ -372,12 +381,6 @@ export default function ViewerClient({ docId }: { docId: string }) {
             </span>
           )}
         </div>
-        <TooltipChip tip="Your library of opened PDFs.">
-          <Link href="/library" aria-label="Open library" className="tab-item">
-            <BookOpen className="h-3.5 w-3.5 text-[var(--ink-400)]" />
-            <span>Library</span>
-          </Link>
-        </TooltipChip>
         <div className="ml-auto flex items-center gap-2 pr-1">
           <KGStatusBadge docId={docId} />
           <TagsChip
