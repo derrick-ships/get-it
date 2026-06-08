@@ -64,6 +64,15 @@ jobs:
             target: win-x64
             triple: win32-x64
             artifact: dist-electron/*.exe
+          # Linux x64 builds a portable AppImage on a native ubuntu runner.
+          # No code signing on Linux; electron-builder bundles appimagetool,
+          # and the matching musl Codex binary is fetched per-target by
+          # scripts/electron-prepare.mjs, same as every other slice.
+          - label: Linux (x64)
+            os: ubuntu-latest
+            target: linux-x64
+            triple: linux-x64
+            artifact: dist-electron/*.AppImage
 
     steps:
       - name: Checkout

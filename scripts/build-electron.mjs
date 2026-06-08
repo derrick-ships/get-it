@@ -7,7 +7,8 @@
  *   node scripts/build-electron.mjs --target=mac-arm64
  *   node scripts/build-electron.mjs --target=mac-x64
  *   node scripts/build-electron.mjs --target=win-x64
- *   node scripts/build-electron.mjs --all      # sequential: mac-arm64, mac-x64, win-x64
+ *   node scripts/build-electron.mjs --target=linux-x64
+ *   node scripts/build-electron.mjs --all      # sequential: mac-arm64, mac-x64, win-x64, linux-x64
  *
  * Internally each target invokes electron-builder with the right flags
  * AFTER running `npm run electron:prepare -- --target=<target-triple>` so
@@ -203,7 +204,7 @@ async function buildOne(targetKey) {
 
 async function main() {
   if (all) {
-    for (const k of ["mac-arm64", "mac-x64", "win-x64"]) {
+    for (const k of ["mac-arm64", "mac-x64", "win-x64", "linux-x64"]) {
       await buildOne(k);
     }
     return;

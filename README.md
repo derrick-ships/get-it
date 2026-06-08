@@ -132,7 +132,7 @@ Local desktop builds, one or all targets:
 ```bash
 npm run build && npm run electron:prepare
 
-node scripts/build-electron.mjs --target=mac-arm64   # or mac-x64 / win-x64 / --all
+node scripts/build-electron.mjs --target=mac-arm64   # or mac-x64 / win-x64 / linux-x64 / --all
 ```
 
 Artefacts land in `dist-electron/`. Cross-arch builds pull the matching Codex platform package from npm on the fly, so you do not need an Intel Mac or a Windows VM to build for them.
