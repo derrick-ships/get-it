@@ -11,13 +11,13 @@
 
 export const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0";
 
-export const GITHUB_OWNER = "beltromatti";
+export const GITHUB_OWNER = "derrick-ships";
 export const GITHUB_REPO = "get-it";
 export const GITHUB_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}`;
 export const GITHUB_RELEASES_API = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
 export const GITHUB_RELEASES_URL = `${GITHUB_URL}/releases`;
 
-export const FEEDBACK_EMAIL = "beltromatti@gmail.com";
+export const FEEDBACK_EMAIL = "derrick@theagencylatam.com";
 
 export const DISCORD_URL = "https://discord.gg/DpQPswRhsK";
 
