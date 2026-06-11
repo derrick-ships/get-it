@@ -1,0 +1,23 @@
+Classical Mechanics: Forces, Motion, and Energy
+
+Mechanics is the branch of physics that studies the motion of objects and the forces that cause that motion. At its core, classical mechanics rests on Newton's three laws, which together describe how objects accelerate in response to applied forces, how forces between pairs of objects are equal and opposite, and how an object at rest or in uniform motion stays that way unless acted upon by an external force.
+
+Newton's second law, F = ma, is the workhorse of the discipline. It tells us that the net force on an object equals the product of its mass and its acceleration. When multiple forces act on a single body, we add them as vectors to find the resultant. If the resultant is zero, the object is in equilibrium; if it is nonzero, the object accelerates in the direction of the resultant.
+
+Work and Energy
+
+The concept of work connects forces to energy. When a force F acts on an object displaced by d, the work done is the dot product of F and d. Work measured in joules is positive when the force aids the displacement, negative when it opposes it. Kinetic energy, the energy of motion, equals one half times mass times velocity squared. The work-energy theorem states that the net work done on an object equals the change in its kinetic energy.
+
+Potential energy arises when a conservative force acts on a system. Gravitational potential energy near the surface of the Earth equals mass times gravitational acceleration times height. Elastic potential energy stored in a compressed spring equals one half times the spring constant times the square of the compression. In a closed system with only conservative forces, the sum of kinetic and potential energy remains constant — this is conservation of mechanical energy.
+
+Momentum and Collisions
+
+Linear momentum is the product of an object's mass and its velocity. Newton's second law can be restated as: the net force equals the rate of change of momentum. When no external force acts on a system, total momentum is conserved. This principle governs collisions: in an elastic collision both momentum and kinetic energy are conserved, while in a perfectly inelastic collision the objects stick together and only momentum is conserved.
+
+Angular momentum describes the rotational counterpart. An object moving in a circle of radius r with linear momentum p has angular momentum L equal to r cross p. For a rigid body rotating about a fixed axis, L equals the moment of inertia times the angular velocity. Conservation of angular momentum explains why a spinning ice skater spins faster when she pulls her arms inward: the moment of inertia decreases, so the angular velocity must increase to keep L constant.
+
+Oscillations
+
+Simple harmonic motion arises whenever the restoring force on an object is proportional to its displacement from equilibrium. A mass on a spring satisfies this condition: the spring exerts a force F equal to negative k times x, where k is the spring constant and x is the displacement. The resulting motion is sinusoidal with angular frequency equal to the square root of k over m. The period is two pi times that inverse.
+
+A simple pendulum of length L exhibits approximately simple harmonic motion for small angles. The period equals two pi times the square root of L over g, independent of the mass of the bob. Damping due to air resistance or friction gradually reduces the amplitude of oscillation; driving the system at its natural frequency causes resonance, where the amplitude grows until energy dissipation balances energy input.

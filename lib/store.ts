@@ -35,6 +35,10 @@ export type DocMeta = {
    *  the user first opens it. Updated via `touchDoc(id)` (called from
    *  POST /api/doc/[id]/touch). */
   lastOpenedAt?: number | null;
+  /** What the user actually uploaded. Absent on docs created before
+   *  .txt/.md support — those are all PDFs. Text uploads keep their raw
+   *  bytes at originalPath(id, ext) next to the converted source.pdf. */
+  sourceType?: "pdf" | "txt" | "md";
 };
 
 type StoreEntry = DocMeta & {
@@ -103,6 +107,9 @@ export function saveDoc(entry: StoreEntry): void {
     filename: entry.filename,
     uploadedAt: entry.uploadedAt,
     numPages: entry.numPages,
+    // undefined is dropped by JSON.stringify, so pre-text-support docs
+    // keep their exact on-disk shape.
+    sourceType: entry.sourceType,
   };
   fs.writeFileSync(metaPath(entry.id), JSON.stringify(meta, null, 2));
   fs.writeFileSync(extractedPath(entry.id), JSON.stringify(entry.extracted));

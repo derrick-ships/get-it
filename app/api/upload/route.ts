@@ -1,8 +1,13 @@
 /**
  * POST /api/upload
  *   multipart/form-data:
- *     - file: <PDF blob>      (when uploading from the user's machine)
+ *     - file: <PDF / .txt / .md blob>  (when uploading from the user's machine)
  *     - sample: <name>        (when picking one of /public/pdfs/<name>.pdf)
+ *
+ * .txt and .md uploads are converted to a PDF with lib/text-to-pdf so the
+ * whole downstream pipeline (extraction, viewer, tag anchoring, study
+ * tools) runs on them unchanged; the raw text bytes are kept alongside
+ * at original.<ext>.
  *
  * Returns: { docId, numPages, pages: [{ pageIndex, width, height, text }], pdfUrl }
  *
@@ -25,7 +30,14 @@ import {
   type PdfRejectReason,
   type PdfQualityStats,
 } from "@/lib/pdf-extract";
-import { ensureDocDir, pdfPath } from "@/lib/paths";
+import {
+  textToPdf,
+  MAX_TEXT_BYTES,
+  MAX_TEXT_CHARS,
+  CHARS_PER_PAGE_ESTIMATE,
+  type TextKind,
+} from "@/lib/text-to-pdf";
+import { ensureDocDir, originalPath, pdfPath } from "@/lib/paths";
 import { getDoc, newDocId, saveDoc } from "@/lib/store";
 
 export const runtime = "nodejs";
@@ -39,9 +51,38 @@ const SAMPLE_NAME_TO_DOC_ID: Record<string, string> = {
   chemistry: "sample-chemistry",
 };
 
+type SourceKind = "pdf" | TextKind;
+
+/** Map the (sanitized) filename to how we'll ingest it. */
+function kindOf(filename: string): SourceKind | null {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".pdf")) return "pdf";
+  if (lower.endsWith(".txt")) return "txt";
+  if (lower.endsWith(".md") || lower.endsWith(".markdown")) return "md";
+  return null;
+}
+
 /** User-facing copy for every rejection reason. Coherent voice across the
- *  whole gate so the UploadCard alert reads the same regardless of cause. */
-function rejectionMessage(reason: PdfRejectReason, stats?: PdfQualityStats): string {
+ *  whole gate so the UploadCard alert reads the same regardless of cause.
+ *  Text uploads hit the same gates after conversion, so the copy drops the
+ *  PDF-specific framing for them. */
+function rejectionMessage(
+  reason: PdfRejectReason,
+  stats?: PdfQualityStats,
+  kind: SourceKind = "pdf",
+): string {
+  if (kind !== "pdf") {
+    switch (reason) {
+      case "too_many_pages":
+        return `This file comes out to ${stats?.numPages ?? "too many"} pages of text. Get It. supports documents up to ${MAX_PDF_PAGES} pages — try a single chapter or a shorter file.`;
+      case "no_text":
+        return "This file has almost no readable text. Get It. needs actual content to study from — add some text and upload it again.";
+      case "image_dominant":
+      case "unreadable":
+      default:
+        return "This file couldn't be read. Try re-saving it as plain UTF-8 text, then upload again.";
+    }
+  }
   switch (reason) {
     case "too_many_pages":
       return `This document has ${stats?.numPages ?? "too many"} pages. Get It. supports PDFs up to ${MAX_PDF_PAGES} pages — try a single chapter or a shorter export.`;
@@ -55,9 +96,13 @@ function rejectionMessage(reason: PdfRejectReason, stats?: PdfQualityStats): str
   }
 }
 
-function rejectResponse(reason: PdfRejectReason, stats?: PdfQualityStats) {
+function rejectResponse(
+  reason: PdfRejectReason,
+  stats?: PdfQualityStats,
+  kind: SourceKind = "pdf",
+) {
   return NextResponse.json(
-    { error: rejectionMessage(reason, stats), code: reason, stats },
+    { error: rejectionMessage(reason, stats, kind), code: reason, stats },
     { status: 422 },
   );
 }
@@ -110,9 +155,75 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "expected multipart/form-data" }, { status: 400 });
   }
 
-  // Sanity: must look like a PDF.
-  if (buffer.subarray(0, 5).toString("ascii") !== "%PDF-") {
-    return NextResponse.json({ error: "not a PDF" }, { status: 400 });
+  const kind = kindOf(filename);
+  if (!kind) {
+    return NextResponse.json(
+      { error: "Unsupported file type. Get It. accepts .pdf, .txt, and .md files." },
+      { status: 400 },
+    );
+  }
+
+  // Raw .txt/.md bytes — persisted next to the converted PDF below.
+  let originalBytes: Buffer | null = null;
+
+  if (kind === "pdf") {
+    // Sanity: must look like a PDF.
+    if (buffer.subarray(0, 5).toString("ascii") !== "%PDF-") {
+      return NextResponse.json({ error: "not a PDF" }, { status: 400 });
+    }
+  } else {
+    // Text uploads have no magic bytes — validate by size, binary sniff,
+    // and a strict UTF-8 decode, then convert to PDF so the rest of the
+    // pipeline runs unchanged.
+    if (buffer.length > MAX_TEXT_BYTES) {
+      return NextResponse.json(
+        {
+          error: `This file is ${(buffer.length / 1024 / 1024).toFixed(1)} MB of text — far more than ${MAX_PDF_PAGES} pages. Try a single chapter or a shorter file.`,
+        },
+        { status: 422 },
+      );
+    }
+    if (buffer.includes(0)) {
+      return NextResponse.json(
+        { error: "This file isn't plain text — it looks like a binary file with a .txt/.md name. Try exporting it as real UTF-8 text." },
+        { status: 422 },
+      );
+    }
+    let text: string;
+    try {
+      text = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+    } catch {
+      return NextResponse.json(
+        { error: "This file isn't valid UTF-8 text. Re-save it with UTF-8 encoding, then upload again." },
+        { status: 422 },
+      );
+    }
+    if (text.length > MAX_TEXT_CHARS) {
+      return rejectResponse(
+        "too_many_pages",
+        {
+          numPages: Math.ceil(text.length / CHARS_PER_PAGE_ESTIMATE),
+          textPages: 0,
+          totalAlnum: 0,
+          richRatio: 0,
+        },
+        kind,
+      );
+    }
+    const converted = await textToPdf(text, { kind, title: filename });
+    // pdfkit's built-in fonts are WinAnsi-only; if most of the file became
+    // "?" (CJK, Cyrillic, …) the study material would be garbage — refuse.
+    if (
+      converted.totalChars > 0 &&
+      converted.replacedChars / converted.totalChars > 0.2
+    ) {
+      return NextResponse.json(
+        { error: "This file is mostly written in characters Get It. can't render yet (for example Cyrillic or CJK scripts). Latin-script text works best for now." },
+        { status: 422 },
+      );
+    }
+    originalBytes = buffer;
+    buffer = converted.pdf;
   }
 
   // Extract FIRST, from the in-memory bytes, so we can gate the document
@@ -127,11 +238,11 @@ export async function POST(req: Request) {
     extracted = await extractPdf(u8);
   } catch (e) {
     if (e instanceof PdfUnsupportedError) {
-      return rejectResponse(e.reason, e.stats);
+      return rejectResponse(e.reason, e.stats, kind);
     }
     // pdf.js throws on encrypted / corrupt files — surface a friendly hint
     // instead of a 500.
-    return rejectResponse("unreadable");
+    return rejectResponse("unreadable", undefined, kind);
   }
 
   // Text-coverage gate. Samples are curated and known-good, so they skip it;
@@ -139,13 +250,16 @@ export async function POST(req: Request) {
   if (!presetDocId) {
     const quality = assessPdfQuality(extracted);
     if (!quality.ok) {
-      return rejectResponse(quality.reason as PdfRejectReason, quality.stats);
+      return rejectResponse(quality.reason as PdfRejectReason, quality.stats, kind);
     }
   }
 
   const docId = presetDocId ?? newDocId();
   ensureDocDir(docId);
   await fs.writeFile(pdfPath(docId), buffer);
+  if (originalBytes && kind !== "pdf") {
+    await fs.writeFile(originalPath(docId, kind), originalBytes);
+  }
   const pdfUrl = `/api/pdf/${docId}`;
 
   saveDoc({
@@ -153,6 +267,7 @@ export async function POST(req: Request) {
     filename,
     uploadedAt: Date.now(),
     numPages: extracted.numPages,
+    sourceType: kind,
     extracted,
     pdfUrl,
   });

@@ -28,12 +28,15 @@ const nextConfig: NextConfig = {
   // pdfjs-dist dynamically imports its worker via `import(this.workerSrc)`
   // with `webpackIgnore: true`. Next's standalone tracer can't see that,
   // so we tell it explicitly to include the worker file in the bundle.
-  // Same for the codex platform binary, which lives in optionalDeps.
+  // Same for the codex platform binary, which lives in optionalDeps, and
+  // for pdfkit's AFM font metrics, which it fs.reads at runtime when a
+  // .txt/.md upload is converted to PDF.
   outputFileTracingIncludes: {
     "**/*": [
       "./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
       "./node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs",
       "./node_modules/@openai/codex/bin/codex.js",
+      "./node_modules/pdfkit/js/data/**",
     ],
   },
   // Keep the tracer out of paths the Next.js server never needs at
@@ -74,7 +77,12 @@ const nextConfig: NextConfig = {
   // platform-specific assets (pdfjs workers, codex binary in vendor/)
   // resolve from node_modules at runtime instead of being inlined by
   // webpack.
-  serverExternalPackages: ["pdfjs-dist", "@openai/codex-sdk", "@openai/codex"],
+  serverExternalPackages: [
+    "pdfjs-dist",
+    "@openai/codex-sdk",
+    "@openai/codex",
+    "pdfkit",
+  ],
 };
 
 export default nextConfig;
