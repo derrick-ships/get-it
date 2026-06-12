@@ -46,7 +46,7 @@ type Health = {
 
 // Human-facing download page — always points at the newest published build.
 const LATEST_RELEASE_URL =
-  "https://github.com/beltromatti/get-it/releases/latest";
+  "https://github.com/derrick-ships/get-it/releases/latest";
 
 declare global {
   interface Window {

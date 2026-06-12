@@ -48,7 +48,7 @@ const FILENAME_TO_TITLE: Record<string, string> = {
 };
 
 function titleOf(filename: string): string {
-  return FILENAME_TO_TITLE[filename] ?? filename.replace(/\.pdf$/i, "");
+  return FILENAME_TO_TITLE[filename] ?? filename.replace(/\.(pdf|txt|md|markdown)$/i, "");
 }
 
 function humaniseAgo(ts: number): string {
@@ -113,7 +113,7 @@ export default function LibraryClient() {
 
   const handleDelete = useCallback(
     async (id: string) => {
-      if (!confirm("Remove this document from your library? This deletes the PDF, work context, and knowledge graph for it.")) {
+      if (!confirm("Remove this document from your library? This deletes the document, work context, and knowledge graph for it.")) {
         return;
       }
       setDeleting(id);
@@ -138,7 +138,7 @@ export default function LibraryClient() {
     <main className="flex flex-1 min-h-0 flex-col bg-[var(--surface-canvas)] text-[var(--ink-900)]">
       {/* Top tab bar */}
       <div className="tab-bar tab-bar--fused">
-        <TooltipChip tip="Open or drop a new PDF.">
+        <TooltipChip tip="Open or drop a new document.">
           <Link href="/" aria-label="Go to upload" className="tab-item">
             <Upload className="h-3.5 w-3.5 text-[var(--ink-400)]" />
             <span>Upload</span>

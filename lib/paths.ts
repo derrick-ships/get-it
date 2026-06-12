@@ -16,7 +16,9 @@
  * Layout:
  *   <DATA_DIR>/
  *     docs.json                       — index of all docs (id, filename, …)
- *     docs/<docId>/source.pdf         — original PDF bytes
+ *     docs/<docId>/source.pdf         — PDF bytes (as uploaded, or converted
+ *                                       from a .txt/.md upload)
+ *     docs/<docId>/original.<ext>     — raw .txt/.md bytes for text uploads
  *     docs/<docId>/meta.json          — { id, filename, uploadedAt, numPages }
  *     docs/<docId>/extracted.json     — cached pdf-extract output
  *     docs/<docId>/workctx.json       — chat / flashcards / quizzes / feynman journal
@@ -69,6 +71,11 @@ export function docDir(docId: string): string {
 
 export function pdfPath(docId: string): string {
   return path.join(docDir(docId), "source.pdf");
+}
+
+/** Raw bytes of a .txt/.md upload, kept next to the converted source.pdf. */
+export function originalPath(docId: string, ext: "txt" | "md"): string {
+  return path.join(docDir(docId), `original.${ext}`);
 }
 
 export function metaPath(docId: string): string {

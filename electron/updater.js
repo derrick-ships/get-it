@@ -31,7 +31,7 @@ const fs = require("node:fs");
 const https = require("node:https");
 const os = require("node:os");
 
-const GITHUB_OWNER = "beltromatti";
+const GITHUB_OWNER = "derrick-ships";
 const GITHUB_REPO = "get-it";
 const RELEASES_LATEST_URL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
 
@@ -305,6 +305,11 @@ function showUpdateWindow() {
 async function maybeRunUpdate() {
   // Bypass for explicit opt-out (testing / corporate networks).
   if (process.env.GETIT_SKIP_UPDATE === "1") return false;
+  // A local / source-tree build is never release-tagged: package.json
+  // stays "0.0.0". Such a build must never be nagged to "update" to a
+  // published release — that's the broken "you're on 0.0.0" prompt. Only
+  // a real, version-stamped release build checks for updates.
+  if (compareVersions(app.getVersion(), "0.0.0") <= 0) return false;
   ensureIpc();
   pending = await checkOnceForUpdate();
   if (!pending) return false;
