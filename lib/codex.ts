@@ -18,6 +18,7 @@
 import { Codex } from "@openai/codex-sdk";
 import type { ThreadOptions } from "@openai/codex-sdk";
 import { CODEX_SCRATCH_DIR } from "./paths";
+import { loadSettings } from "./settings-store";
 import { CodexError, classifyCodexError } from "./codex-errors";
 import type { CodexErrorKind } from "./codex-errors";
 
@@ -50,7 +51,21 @@ export type { CodexErrorKind } from "./codex-errors";
  * OpenAI retires it, ship an app update bumping this value (the in-app
  * "model unsupported" banner tells users exactly that).
  */
-export const CODEX_MODEL = "gpt-5.5";
+export { CODEX_MODEL, CODEX_MODELS } from "./codex-models";
+import { CODEX_MODEL, CODEX_MODELS } from "./codex-models";
+
+/**
+ * Service tier for every request, pinned to "default".
+ *
+ * Why pin it: gpt-5.x models carry a catalog default service tier of
+ * "flex" (a slower/cheaper API-billing tier). When we don't set one
+ * explicitly, the Codex binary falls back to that catalog default and
+ * sends `service_tier: "flex"` — which OpenAI rejects for ChatGPT-account
+ * auth with a 400 ("Unsupported service_tier: flex"), so every agent call
+ * fails and nothing generates. Forcing "default" (the universally
+ * available tier) makes ChatGPT-plan auth work on every model and plan.
+ */
+const CODEX_SERVICE_TIER = "default";
 
 let _codex: Codex | null = null;
 
@@ -63,9 +78,27 @@ function getCodex(): Codex {
       // disable image generation so we can use 'low' reasoning; the demo is
       // text-only so there is nothing to lose.
       tools: { image_gen: false },
+      // Never let the binary fall back to the model's catalog default tier
+      // ("flex"), which ChatGPT-account auth rejects. See note above.
+      service_tier: CODEX_SERVICE_TIER,
     },
   });
   return _codex;
+}
+
+/** The model to run, honouring the user's Settings choice, else the
+ *  pinned default. Read per-call so a live model switch takes effect on
+ *  the next agent run without restarting the server. */
+function resolveModel(): string {
+  try {
+    const picked = loadSettings().model;
+    if (picked && (CODEX_MODELS as readonly string[]).includes(picked)) {
+      return picked;
+    }
+  } catch {
+    /* settings unreadable — fall through to the pinned default */
+  }
+  return CODEX_MODEL;
 }
 
 export type RunOptions = {
@@ -81,7 +114,7 @@ export type RunOptions = {
 
 function threadOptions(opts: RunOptions = {}): ThreadOptions {
   return {
-    model: CODEX_MODEL,
+    model: resolveModel(),
     sandboxMode: "read-only",
     approvalPolicy: "never",
     skipGitRepoCheck: true,

@@ -3,7 +3,6 @@ import UploadCard from "@/components/UploadCard";
 import AccountButton from "@/components/AccountButton";
 import SettingsButton from "@/components/SettingsButton";
 import TooltipChip from "@/components/TooltipChip";
-import WelcomePopup from "@/components/WelcomePopup";
 import { APP_VERSION } from "@/lib/version";
 import {
   Upload,
@@ -90,7 +89,6 @@ export default function Home() {
       >
         v{APP_VERSION}
       </div>
-      <WelcomePopup />
     </main>
   );
 }
