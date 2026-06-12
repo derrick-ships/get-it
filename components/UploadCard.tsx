@@ -100,6 +100,7 @@ export default function UploadCard() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [progress, setProgress] = useState<{ i: number; n: number } | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -134,24 +135,78 @@ export default function UploadCard() {
     [router],
   );
 
-  const startUpload = useCallback(
-    async (file: File) => {
+  // Upload up to MAX_FILES at once. Each file is converted/validated by
+  // /api/upload independently, so we POST them one at a time (keeping the
+  // user's Codex usage and the server's parse load steady) and report
+  // progress. One file → jump straight into its viewer; several → land in
+  // the Library so the whole batch is visible.
+  const MAX_FILES = 20;
+  const startUploads = useCallback(
+    async (fileList: FileList | File[]) => {
       setError(null);
-      if (!/\.(pdf|txt|md|markdown)$/i.test(file.name)) {
-        setError("Please pick a PDF, .txt, or .md file");
+      const picked = Array.from(fileList);
+      if (picked.length === 0) return;
+
+      const accepted = picked.filter((f) =>
+        /\.(pdf|txt|md|markdown)$/i.test(f.name),
+      );
+      if (accepted.length === 0) {
+        setError("Please pick PDF, .txt, or .md files");
         return;
       }
-      setBusy("upload");
-      try {
-        const fd = new FormData();
-        fd.set("file", file);
-        const r = await fetch("/api/upload", { method: "POST", body: fd });
-        if (!r.ok) throw new Error((await r.json()).error ?? "upload failed");
-        const j = await r.json();
-        router.push(`/viewer/${j.docId}`);
-      } catch (e) {
-        setError((e as Error).message);
+      const batch = accepted.slice(0, MAX_FILES);
+      const notes: string[] = [];
+      if (accepted.length > MAX_FILES) {
+        notes.push(`Only the first ${MAX_FILES} files were uploaded.`);
+      }
+
+      let okCount = 0;
+      let firstDocId: string | null = null;
+      const failures: string[] = [];
+
+      for (let i = 0; i < batch.length; i++) {
+        const file = batch[i];
+        setProgress({ i: i + 1, n: batch.length });
+        setBusy("upload");
+        try {
+          const fd = new FormData();
+          fd.set("file", file);
+          const r = await fetch("/api/upload", { method: "POST", body: fd });
+          if (!r.ok) {
+            const msg =
+              (await r.json().catch(() => ({} as { error?: string }))).error ??
+              "upload failed";
+            failures.push(`${file.name}: ${msg}`);
+            continue;
+          }
+          const j = await r.json();
+          okCount += 1;
+          if (!firstDocId) firstDocId = j.docId as string;
+        } catch (e) {
+          failures.push(`${file.name}: ${(e as Error).message}`);
+        }
+      }
+
+      setProgress(null);
+
+      // If anything was skipped or failed, stay on the page and show a
+      // summary so the user sees exactly what happened (navigating away
+      // would hide it). Successful files are already in the Library.
+      if (failures.length > 0 || notes.length > 0) {
         setBusy(null);
+        const summary: string[] = [...notes];
+        if (okCount > 0) summary.push(`${okCount} added to your Library.`);
+        if (failures.length > 0)
+          summary.push(`${failures.length} couldn't be added:\n${failures.join("\n")}`);
+        setError(summary.join("\n"));
+        return;
+      }
+
+      // Clean run: 1 file → open it; many → show the batch in the Library.
+      if (batch.length === 1 && firstDocId) {
+        router.push(`/viewer/${firstDocId}`);
+      } else {
+        router.push(`/library`);
       }
     },
     [router],
@@ -170,7 +225,7 @@ export default function UploadCard() {
       </h1>
 
       <p className="mt-7 max-w-2xl text-[15px] leading-[1.65] text-[var(--ink-700)]">
-        Drop a PDF, text, or Markdown file. Its hardest concepts come alive inline as you read.
+        Drop your PDFs, text, or Markdown files (up to 20 at once). Their hardest concepts come alive inline as you read.
         Chat with it, drill yourself, explain it back to a curious
         eight-year-old. Watch a map of what you actually understand
         grow, concept by concept, not page by page.
@@ -187,8 +242,8 @@ export default function UploadCard() {
         onDrop={(e) => {
           e.preventDefault();
           setDragOver(false);
-          const f = e.dataTransfer.files?.[0];
-          if (f) startUpload(f);
+          const files = e.dataTransfer.files;
+          if (files && files.length > 0) startUploads(files);
         }}
         onClick={() => inputRef.current?.click()}
         role="button"
@@ -203,11 +258,12 @@ export default function UploadCard() {
         <input
           ref={inputRef}
           type="file"
+          multiple
           accept="application/pdf,.pdf,.txt,.md,.markdown,text/plain,text/markdown"
           className="hidden"
           onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) startUpload(f);
+            const files = e.target.files;
+            if (files && files.length > 0) startUploads(files);
           }}
         />
         {/* Output-type badges — what we'll generate from the PDF */}
@@ -232,15 +288,17 @@ export default function UploadCard() {
             <>
               <Loader2 className="h-4 w-4 animate-spin text-[var(--accent-600)]" />
               <span className="font-medium text-[var(--ink-900)]">
-                Uploading and parsing…
+                {progress && progress.n > 1
+                  ? `Uploading and parsing ${progress.i} of ${progress.n}…`
+                  : "Uploading and parsing…"}
               </span>
             </>
           ) : (
             <>
-              <span>Drop your PDF, .txt, or .md here, or</span>
+              <span>Drop your PDFs, .txt, or .md files here, or</span>
               <span className="inline-flex items-center gap-1.5 rounded-md bg-[var(--accent-600)] px-3 py-1 text-[12.5px] font-semibold text-white shadow-sm transition hover:bg-[var(--accent-700)]">
                 <Upload className="h-3.5 w-3.5" />
-                Select the file
+                Select files
               </span>
             </>
           )}
@@ -262,7 +320,7 @@ export default function UploadCard() {
             <p className="text-[13px] font-semibold text-rose-900">
               We couldn&rsquo;t open this document
             </p>
-            <p className="mt-1 text-[12.5px] leading-relaxed text-rose-800">{error}</p>
+            <p className="mt-1 whitespace-pre-line text-[12.5px] leading-relaxed text-rose-800">{error}</p>
           </div>
           <button
             type="button"

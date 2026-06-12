@@ -7,7 +7,12 @@
  */
 
 import { NextResponse } from "next/server";
-import { loadSettings, saveSettings, type AppSettings } from "@/lib/settings-store";
+import {
+  loadSettings,
+  saveSettings,
+  normalizeModel,
+  type AppSettings,
+} from "@/lib/settings-store";
 
 export const runtime = "nodejs";
 
@@ -31,6 +36,7 @@ export async function POST(req: Request) {
       typeof b.maxRetries === "number" && b.maxRetries >= 0
         ? b.maxRetries
         : current.maxRetries,
+    model: b.model !== undefined ? normalizeModel(b.model) : current.model,
   };
   saveSettings(next);
   return NextResponse.json(next);

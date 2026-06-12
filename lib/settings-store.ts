@@ -17,10 +17,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { DATA_DIR } from "./paths";
 import { AUTO_GENERATE_VIZ, MAX_VIZ_GEN_RETRIES } from "./config";
+import { CODEX_MODEL, CODEX_MODELS } from "./codex-models";
 
 export type AppSettings = {
   autoGenerate: boolean;
   maxRetries: number;
+  /** Which Codex model the agents run on. One of CODEX_MODELS. */
+  model: string;
 };
 
 const VERSION = 1 as const;
@@ -30,7 +33,15 @@ function defaultsFromEnv(): AppSettings {
   return {
     autoGenerate: AUTO_GENERATE_VIZ,
     maxRetries: MAX_VIZ_GEN_RETRIES,
+    model: CODEX_MODEL,
   };
+}
+
+/** Coerce an arbitrary value to a supported model id, else the default. */
+export function normalizeModel(v: unknown): string {
+  return typeof v === "string" && (CODEX_MODELS as readonly string[]).includes(v)
+    ? v
+    : CODEX_MODEL;
 }
 
 export function loadSettings(): AppSettings {
@@ -48,6 +59,7 @@ export function loadSettings(): AppSettings {
           typeof parsed.maxRetries === "number" && parsed.maxRetries >= 0
             ? Math.min(10, Math.floor(parsed.maxRetries))
             : env.maxRetries,
+        model: parsed.model !== undefined ? normalizeModel(parsed.model) : env.model,
       };
     }
   } catch {
@@ -62,6 +74,7 @@ export function saveSettings(s: AppSettings): void {
     savedAt: Date.now(),
     autoGenerate: !!s.autoGenerate,
     maxRetries: Math.min(10, Math.max(0, Math.floor(s.maxRetries))),
+    model: normalizeModel(s.model),
   };
   const tmp = `${SETTINGS_PATH}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(file, null, 2));

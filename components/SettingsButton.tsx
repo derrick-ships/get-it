@@ -15,10 +15,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Settings2 } from "lucide-react";
 import { AUTO_GENERATE_VIZ, MAX_VIZ_GEN_RETRIES } from "@/lib/config";
 import { APP_VERSION } from "@/lib/version";
+import { CODEX_MODEL, CODEX_MODELS } from "@/lib/codex-models";
 
 export type SettingsPayload = {
   autoGenerate: boolean;
   maxRetries: number;
+  model: string;
 };
 
 export const SETTINGS_EVENT = "getit:settings";
@@ -81,6 +83,7 @@ export default function SettingsButton() {
 function SettingsPanel({ refreshKey }: { refreshKey: string }) {
   const [autoGenerate, setAutoGenerate] = useState<boolean>(AUTO_GENERATE_VIZ);
   const [maxRetries, setMaxRetries] = useState<number>(MAX_VIZ_GEN_RETRIES);
+  const [model, setModel] = useState<string>(CODEX_MODEL);
   const hydratedRef = useRef(false);
 
   // Fetch fresh on every popover open so external changes (CLI edits,
@@ -95,6 +98,7 @@ function SettingsPanel({ refreshKey }: { refreshKey: string }) {
         if (cancelled) return;
         if (typeof s.autoGenerate === "boolean") setAutoGenerate(s.autoGenerate);
         if (typeof s.maxRetries === "number") setMaxRetries(s.maxRetries);
+        if (typeof s.model === "string") setModel(s.model);
         hydratedRef.current = true;
       })
       .catch(() => {
@@ -144,6 +148,14 @@ function SettingsPanel({ refreshKey }: { refreshKey: string }) {
     [persist],
   );
 
+  const onModel = useCallback(
+    (v: string) => {
+      setModel(v);
+      persist({ model: v });
+    },
+    [persist],
+  );
+
   return (
     <>
       <div className="border-b border-[var(--border-subtle)] px-3 py-2">
@@ -163,8 +175,32 @@ function SettingsPanel({ refreshKey }: { refreshKey: string }) {
         </p>
       </div>
 
-      {/* Auto-generate toggle */}
+      {/* Model picker */}
       <div className="flex items-start gap-2.5 px-3 py-2.5">
+        <div className="min-w-0 flex-1">
+          <p className="text-[12.5px] font-medium text-[var(--ink-900)]">
+            AI model
+          </p>
+          <p className="text-[11px] leading-relaxed text-[var(--ink-500)]">
+            The model every agent runs on, billed to your ChatGPT plan. Switch
+            if one isn&rsquo;t available on your account.
+          </p>
+        </div>
+        <select
+          value={model}
+          onChange={(e) => onModel(e.target.value)}
+          className="h-7 shrink-0 rounded-md border border-[var(--border-subtle)] bg-white px-2 text-[12.5px] font-medium text-[var(--ink-900)] focus:border-[var(--accent-500)] focus:outline-none"
+        >
+          {CODEX_MODELS.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Auto-generate toggle */}
+      <div className="flex items-start gap-2.5 border-t border-[var(--border-subtle)] px-3 py-2.5">
         <button
           type="button"
           role="switch"
