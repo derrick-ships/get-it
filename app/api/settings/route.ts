@@ -59,6 +59,9 @@ export async function POST(req: Request) {
         : current.ollamaBaseUrl,
     ollamaModel:
       typeof b.ollamaModel === "string" ? b.ollamaModel.trim() : current.ollamaModel,
+    localModelDirs: Array.isArray(b.localModelDirs)
+      ? b.localModelDirs
+      : current.localModelDirs,
   };
   saveSettings(next);
   return NextResponse.json(next);

@@ -60,10 +60,17 @@ export const DOCS_DIR = path.join(DATA_DIR, "docs");
 export const DOCS_INDEX_PATH = path.join(DATA_DIR, "docs.json");
 export const CODEX_SCRATCH_DIR = path.join(DATA_DIR, "codex-scratch");
 
+// Projects group documents (Claude-style: a name + emoji). The index lists
+// every project; each project gets its own folder for a cross-document
+// knowledge graph that spans all its member docs.
+export const PROJECTS_DIR = path.join(DATA_DIR, "projects");
+export const PROJECTS_INDEX_PATH = path.join(DATA_DIR, "projects.json");
+
 // Eagerly ensure the top-level directories exist. fs.mkdirSync with
 // recursive:true is a no-op when they're already there.
 fs.mkdirSync(DOCS_DIR, { recursive: true });
 fs.mkdirSync(CODEX_SCRATCH_DIR, { recursive: true });
+fs.mkdirSync(PROJECTS_DIR, { recursive: true });
 
 export function docDir(docId: string): string {
   return path.join(DOCS_DIR, docId);
@@ -100,4 +107,19 @@ export function tagsPath(docId: string): string {
 
 export function ensureDocDir(docId: string): void {
   fs.mkdirSync(docDir(docId), { recursive: true });
+}
+
+// ── Projects ────────────────────────────────────────────────────────────
+
+export function projectDir(projectId: string): string {
+  return path.join(PROJECTS_DIR, projectId);
+}
+
+/** Cross-document knowledge graph for a project. */
+export function projectKgPath(projectId: string): string {
+  return path.join(projectDir(projectId), "kg.json");
+}
+
+export function ensureProjectDir(projectId: string): void {
+  fs.mkdirSync(projectDir(projectId), { recursive: true });
 }

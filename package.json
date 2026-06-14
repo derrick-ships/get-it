@@ -21,6 +21,8 @@
     "generate-pdfs": "tsx scripts/generate-sample-pdfs.ts",
     "test:errors": "tsx scripts/test-error-handling.ts",
     "test:text-upload": "node scripts/test-text-upload.mjs",
+    "test:local-models": "tsx scripts/test-local-models.ts",
+    "test:projects": "tsx scripts/test-projects.ts",
     "smoke": "node scripts/smoke-test.mjs",
     "smoke-all": "node scripts/full-test.mjs",
     "build-writeup": "node scripts/build-pdf.mjs",

@@ -39,6 +39,9 @@ export type DocMeta = {
    *  .txt/.md support — those are all PDFs. Text uploads keep their raw
    *  bytes at originalPath(id, ext) next to the converted source.pdf. */
   sourceType?: "pdf" | "txt" | "md";
+  /** The project this doc belongs to, if any (Claude-style single
+   *  membership). Absent/null = unfiled. */
+  projectId?: string | null;
 };
 
 type StoreEntry = DocMeta & {
@@ -110,6 +113,7 @@ export function saveDoc(entry: StoreEntry): void {
     // undefined is dropped by JSON.stringify, so pre-text-support docs
     // keep their exact on-disk shape.
     sourceType: entry.sourceType,
+    projectId: entry.projectId ?? null,
   };
   fs.writeFileSync(metaPath(entry.id), JSON.stringify(meta, null, 2));
   fs.writeFileSync(extractedPath(entry.id), JSON.stringify(entry.extracted));
@@ -164,6 +168,49 @@ export function touchDoc(docId: string): DocMeta | null {
     cached.lastOpenedAt = now;
   }
   return next;
+}
+
+/**
+ * Set (or clear, with null) the project a doc belongs to. Persists to both
+ * the index and meta.json and keeps the in-memory cache in sync. Returns the
+ * updated DocMeta, or null if the doc is unknown.
+ */
+export function setDocProject(docId: string, projectId: string | null): DocMeta | null {
+  const docs = readIndex();
+  const idx = docs.findIndex((d) => d.id === docId);
+  if (idx < 0) return null;
+  const next: DocMeta = { ...docs[idx], projectId };
+  docs[idx] = next;
+  writeIndex(docs);
+  try {
+    fs.writeFileSync(metaPath(docId), JSON.stringify(next, null, 2));
+  } catch {
+    /* index is authoritative */
+  }
+  const cached = store.get(docId);
+  if (cached) cached.projectId = projectId;
+  return next;
+}
+
+/** Clear project membership from every doc filed under `projectId`. Used when
+ *  a project is deleted so its docs become unfiled (not deleted). */
+export function clearProjectMembership(projectId: string): void {
+  const docs = readIndex();
+  let changed = false;
+  for (const d of docs) {
+    if (d.projectId === projectId) {
+      d.projectId = null;
+      changed = true;
+      try {
+        fs.writeFileSync(metaPath(d.id), JSON.stringify(d, null, 2));
+      } catch {
+        /* index is authoritative */
+      }
+      const cached = store.get(d.id);
+      if (cached) cached.projectId = null;
+    }
+  }
+  if (changed) writeIndex(docs);
 }
 
 export function deleteDoc(docId: string): boolean {

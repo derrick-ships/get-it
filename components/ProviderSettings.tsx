@@ -14,6 +14,7 @@ import {
   Cloud,
   Cpu,
   Download,
+  FolderSearch,
   HardDrive,
   KeyRound,
   Loader2,
@@ -56,6 +57,22 @@ type Status = {
   codex: { model: string };
 };
 
+type LocalModel = {
+  kind: "ollama" | "lmstudio" | "gguf" | "huggingface";
+  id: string;
+  path: string;
+  sizeGB: number | null;
+  usable: boolean;
+  hint?: string;
+};
+
+type LocalScan = {
+  models: LocalModel[];
+  scannedDirs: string[];
+  ollamaRoot: string | null;
+  ollamaInstalled: boolean;
+};
+
 const PROVIDERS: { id: Provider; label: string; Icon: typeof Cloud }[] = [
   { id: "codex", label: "ChatGPT", Icon: Cloud },
   { id: "openrouter", label: "OpenRouter", Icon: KeyRound },
@@ -69,6 +86,8 @@ export default function ProviderSettings({ onProviderReady }: { onProviderReady?
   const [urlDraft, setUrlDraft] = useState("");
   const [pullPct, setPullPct] = useState<number | null>(null);
   const [pullMsg, setPullMsg] = useState<string | null>(null);
+  const [scan, setScan] = useState<LocalScan | null>(null);
+  const [scanning, setScanning] = useState(false);
   const hydrated = useRef(false);
 
   const loadStatus = useCallback(async () => {
@@ -191,6 +210,18 @@ export default function ProviderSettings({ onProviderReady }: { onProviderReady?
     },
     [loadStatus, persist],
   );
+
+  const runScan = useCallback(async () => {
+    setScanning(true);
+    try {
+      const r = await fetch("/api/providers/local-scan", { cache: "no-store" });
+      if (r.ok) setScan(await r.json());
+    } catch {
+      /* ignore — leave previous results */
+    } finally {
+      setScanning(false);
+    }
+  }, []);
 
   if (!settings) {
     return (
@@ -395,7 +426,115 @@ export default function ProviderSettings({ onProviderReady }: { onProviderReady?
               )}
             </div>
           )}
+
+          {/* Deep local-model finder — locates models already on this machine
+              (Ollama, LM Studio, llama.cpp, Hugging Face / Gemma weights),
+              even when no server is running. */}
+          <div className="rounded-md border border-[var(--border-subtle)] p-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11.5px] font-medium text-[var(--ink-700)]">
+                Already have models on this computer?
+              </p>
+              <button
+                type="button"
+                onClick={runScan}
+                disabled={scanning}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-[var(--border-subtle)] bg-white px-2 py-1 text-[11px] font-medium text-[var(--ink-700)] hover:border-[var(--border-strong)] disabled:opacity-50"
+              >
+                {scanning ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <FolderSearch className="h-3 w-3" />
+                )}
+                {scanning ? "Scanning…" : "Scan this computer"}
+              </button>
+            </div>
+            <p className="mt-0.5 text-[10.5px] leading-snug text-[var(--ink-400)]">
+              Finds Gemma, Llama, Qwen and other models in Ollama, LM Studio,
+              llama.cpp and the Hugging Face cache — and shows where they live.
+            </p>
+
+            {scan && (
+              <div className="mt-2 space-y-1.5">
+                {scan.models.length === 0 ? (
+                  <p className="text-[11px] text-[var(--ink-500)]">
+                    No local models found in the usual places. If yours lives
+                    somewhere unusual, add that folder to{" "}
+                    <code className="text-[var(--ink-600)]">localModelDirs</code>{" "}
+                    and scan again.
+                  </p>
+                ) : (
+                  scan.models.map((m) => (
+                    <LocalModelRow
+                      key={m.path}
+                      model={m}
+                      selected={settings.ollamaModel === m.id}
+                      onUse={() => persist({ ollamaModel: m.id })}
+                    />
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+const KIND_LABEL: Record<LocalModel["kind"], string> = {
+  ollama: "Ollama",
+  lmstudio: "LM Studio",
+  gguf: "GGUF file",
+  huggingface: "Hugging Face",
+};
+
+/** One discovered local model. Ollama models get a one-click "Use"; everything
+ *  else shows where it is and how to serve it. */
+function LocalModelRow({
+  model,
+  selected,
+  onUse,
+}: {
+  model: LocalModel;
+  selected: boolean;
+  onUse: () => void;
+}) {
+  return (
+    <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-sunken)]/40 px-2 py-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-[11.5px] font-medium text-[var(--ink-900)]">
+            {model.id}
+          </p>
+          <p className="text-[10px] text-[var(--ink-400)]">
+            {KIND_LABEL[model.kind]}
+            {model.sizeGB ? ` · ~${model.sizeGB} GB` : ""}
+          </p>
+        </div>
+        {model.usable ? (
+          selected ? (
+            <span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-emerald-600">
+              <Check className="h-3 w-3" /> In use
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={onUse}
+              className="shrink-0 rounded-md bg-[var(--accent-600)] px-2 py-1 text-[11px] font-medium text-white hover:bg-[var(--accent-700)]"
+            >
+              Use
+            </button>
+          )
+        ) : null}
+      </div>
+      <p className="mt-0.5 truncate text-[10px] text-[var(--ink-400)]" title={model.path}>
+        {model.path}
+      </p>
+      {!model.usable && model.hint && (
+        <p className="mt-0.5 text-[10px] leading-snug text-[var(--ink-500)]">
+          {model.hint}
+        </p>
       )}
     </div>
   );
