@@ -95,6 +95,41 @@ app.setPath("userData", DATA_DIR);
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(path.join(DATA_DIR, "logs"), { recursive: true });
 
+// ── Provider settings peek (for the non-blocking boot gate) ─────────────
+// The Next server owns settings.json; here we only read `provider` to decide
+// whether to offer the Codex sign-in wizard at startup. Never throws.
+const SETTINGS_FILE = path.join(DATA_DIR, "settings.json");
+
+function readSettingsFile() {
+  try {
+    return JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf-8"));
+  } catch {
+    return null;
+  }
+}
+
+function writeProviderDefault(provider) {
+  try {
+    fs.writeFileSync(
+      SETTINGS_FILE,
+      JSON.stringify({ v: 1, savedAt: Date.now(), provider }, null, 2),
+    );
+  } catch {
+    /* best-effort */
+  }
+}
+
+async function ollamaReachable() {
+  try {
+    const res = await fetch("http://localhost:11434/api/version", {
+      signal: AbortSignal.timeout(1500),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 // ── Resolve the Next.js standalone server entry ─────────────────────────
 // In `electron .` dev mode the user runs `npm run dev:hmr` which
 // boots `next dev` separately and points us at it via the env var.
@@ -428,13 +463,32 @@ app.whenReady().then(async () => {
     // the app for use. Powers Total/Daily/Weekly/Monthly users.
     analytics.trackOpen();
 
-    // Run the codex wizard. We can't start the Next server without
-    // codex — the agents would crash on the first request.
-    const ok = await ensureCodexReady();
-    if (!ok) {
-      app.quit();
-      return;
+    // Provider-aware, NON-blocking onboarding. The app always launches now:
+    // OpenRouter and Ollama are configured in-app, and Codex sign-in is
+    // offered on demand rather than gating startup (which used to quit the
+    // app for anyone without a ChatGPT login — blocking the new providers).
+    let settingsFile = readSettingsFile();
+    if (!settingsFile) {
+      // First run: prefer a ready local Ollama so the user can start with zero
+      // accounts; otherwise fall back to the Codex/ChatGPT path.
+      const firstProvider = (await ollamaReachable()) ? "ollama" : "codex";
+      writeProviderDefault(firstProvider);
+      settingsFile = { provider: firstProvider };
     }
+    const provider = settingsFile.provider || "codex";
+    if (provider === "codex") {
+      try {
+        const status = refreshCodexStatus();
+        if (!(status.binaryFound && status.versionOk && status.loggedIn)) {
+          // Offer the sign-in wizard once, but never quit — closing it still
+          // opens the app, and the in-app banner can re-trigger setup later.
+          await ensureCodexReady().catch(() => {});
+        }
+      } catch {
+        /* ignore — launch anyway */
+      }
+    }
+
     await startEmbeddedServer();
     createMainWindow();
     bootstrapping = false;

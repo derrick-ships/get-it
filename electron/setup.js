@@ -38,7 +38,7 @@ const https = require("node:https");
 const os = require("node:os");
 const zlib = require("node:zlib");
 
-const REQUIRED_CODEX_VERSION = "0.130.0";
+const REQUIRED_CODEX_VERSION = "0.139.0";
 
 // ── Platform target triple (same table as @openai/codex-sdk) ────────────
 const PLATFORM_PACKAGE_BY_TARGET = {
