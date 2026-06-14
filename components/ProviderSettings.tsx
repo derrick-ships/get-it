@@ -8,7 +8,7 @@
  * progress bar. Persists to /api/settings and broadcasts SETTINGS_EVENT.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
   Check,
   Cloud,
@@ -66,6 +66,7 @@ export default function ProviderSettings({ onProviderReady }: { onProviderReady?
   const [settings, setSettings] = useState<Settings | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
   const [keyDraft, setKeyDraft] = useState("");
+  const [urlDraft, setUrlDraft] = useState("");
   const [pullPct, setPullPct] = useState<number | null>(null);
   const [pullMsg, setPullMsg] = useState<string | null>(null);
   const hydrated = useRef(false);
@@ -88,6 +89,7 @@ export default function ProviderSettings({ onProviderReady }: { onProviderReady?
         if (cancelled) return;
         setSettings(s);
         setKeyDraft(s.openrouterApiKey || "");
+        setUrlDraft(s.ollamaBaseUrl || "");
         hydrated.current = true;
       } catch {
         hydrated.current = true;
@@ -283,12 +285,19 @@ export default function ProviderSettings({ onProviderReady }: { onProviderReady?
               Save
             </button>
           </div>
-          <LabeledSelect
+          <LabeledCombo
             label="Model"
             value={settings.openrouterModel}
             options={[...OPENROUTER_MODELS]}
-            onChange={(v) => persist({ openrouterModel: v })}
+            placeholder="any model id…"
+            onCommit={(v) => persist({ openrouterModel: v })}
           />
+          <p className="text-[10.5px] leading-snug text-[var(--ink-400)]">
+            Type any model id from openrouter.ai/models — e.g.{" "}
+            <code className="text-[var(--ink-600)]">moonshotai/kimi-k2</code>,{" "}
+            <code className="text-[var(--ink-600)]">x-ai/grok-2-1212</code>. Suggestions are
+            just shortcuts.
+          </p>
         </div>
       )}
 
@@ -303,22 +312,45 @@ export default function ProviderSettings({ onProviderReady }: { onProviderReady?
             />
             <span className="text-[var(--ink-500)]">
               {status?.ollama.running
-                ? `Ollama running · ${status.ollama.models.length} model${
+                ? `Local server running · ${status.ollama.models.length} model${
                     status.ollama.models.length === 1 ? "" : "s"
                   }`
-                : "Ollama not detected — install from ollama.com and start it"}
+                : "No local server detected at this URL"}
             </span>
           </div>
 
-          {status?.ollama.running && status.ollama.models.length > 0 && (
-            <LabeledSelect
-              label="Model"
-              value={settings.ollamaModel || ""}
-              options={status.ollama.models}
-              placeholder="Choose a model"
-              onChange={(v) => persist({ ollamaModel: v })}
+          <p className="text-[10.5px] leading-snug text-[var(--ink-400)]">
+            Works with any local OpenAI-compatible server — Ollama
+            (localhost:11434), LM Studio (localhost:1234), or llama.cpp. Point
+            the URL below at yours.
+          </p>
+
+          {/* Local server URL */}
+          <div className="flex gap-1.5">
+            <input
+              type="text"
+              value={urlDraft}
+              placeholder="http://localhost:11434"
+              onChange={(e) => setUrlDraft(e.target.value)}
+              className="h-7 min-w-0 flex-1 rounded-md border border-[var(--border-subtle)] bg-white px-2 text-[12px] text-[var(--ink-900)] focus:border-[var(--accent-500)] focus:outline-none"
             />
-          )}
+            <button
+              type="button"
+              onClick={() => persist({ ollamaBaseUrl: urlDraft.trim() })}
+              className="shrink-0 rounded-md bg-[var(--accent-600)] px-2.5 text-[12px] font-medium text-white hover:bg-[var(--accent-700)]"
+            >
+              Save
+            </button>
+          </div>
+
+          {/* Model — free text so LM Studio / llama.cpp model ids work too */}
+          <LabeledCombo
+            label="Model"
+            value={settings.ollamaModel || ""}
+            options={status?.ollama.models ?? []}
+            placeholder="model name…"
+            onCommit={(v) => persist({ ollamaModel: v })}
+          />
 
           {/* Recommendation + one-click download */}
           {status && (
@@ -397,6 +429,60 @@ function LabeledSelect({
           </option>
         ))}
       </select>
+    </label>
+  );
+}
+
+/** Free-text field with a datalist of suggestions — lets the user type ANY
+ *  model id while still offering the curated shortcuts. Commits on blur/Enter. */
+function LabeledCombo({
+  label,
+  value,
+  options,
+  onCommit,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onCommit: (v: string) => void;
+  placeholder?: string;
+}) {
+  const [draft, setDraft] = useState(value);
+  const listId = useId();
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+  const commit = () => {
+    const v = draft.trim();
+    if (v && v !== value) onCommit(v);
+  };
+  return (
+    <label className="flex items-center justify-between gap-2">
+      <span className="shrink-0 text-[11.5px] text-[var(--ink-600)]">{label}</span>
+      <input
+        list={listId}
+        value={draft}
+        placeholder={placeholder}
+        spellCheck={false}
+        autoCapitalize="off"
+        autoCorrect="off"
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        className="h-7 min-w-0 flex-1 rounded-md border border-[var(--border-subtle)] bg-white px-2 text-[12px] font-medium text-[var(--ink-900)] focus:border-[var(--accent-500)] focus:outline-none"
+      />
+      <datalist id={listId}>
+        {options.map((o) => (
+          <option key={o} value={o} />
+        ))}
+      </datalist>
     </label>
   );
 }

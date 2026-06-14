@@ -28,6 +28,14 @@ language as the source. Match it exactly — Italian PDF → Italian outputs,
 English PDF → English outputs, Spanish PDF → Spanish outputs. Code
 identifiers and JS comments stay in English.`;
 
+const VOICE = `VOICE
+Write for a sharp, curious friend — not a textbook. Titles, captions, and
+explanations must be vivid, concrete, and plain-spoken: lead with the
+intuition or why it matters, reach for an everyday analogy, keep sentences
+short. No academic hedging ("it can be observed that…"), no dry jargon
+dumps. A little wit is welcome; condescension is not. Aim for the reader
+thinking "oh — THAT'S what that means."`;
+
 /**
  * Per-type prompt HEADS — pure constants (no interpolation). Kept first in
  * the final prompt so that every call of a given viz type shares a byte-
@@ -38,6 +46,8 @@ const PROMPT_HEADS: Record<VizType, string> = {
   "3d": `You are Get It.'s visualizer 3D scene generator.
 
 ${LANGUAGE_RULE}
+
+${VOICE}
 
 Produce a JSON object matching the schema. The "setup_code" field MUST be
 a JavaScript function BODY (do NOT wrap it in 'function setup() { ... }')
@@ -77,6 +87,8 @@ CONSTRAINTS:
 
 ${LANGUAGE_RULE}
 
+${VOICE}
+
 Produce a JSON object matching the schema. The "setup_code" field MUST be
 a JavaScript function BODY invoked as
    new Function("api", body)({ ctx, width, height });
@@ -115,6 +127,8 @@ CONSTRAINTS:
 
 ${LANGUAGE_RULE}
 
+${VOICE}
+
 Produce a JSON object matching the schema:
   - main_latex: the headline equation (no $ delimiters; KaTeX-compatible).
   - steps: 2 to 6 derivation/explanation steps, each with one LaTeX line
@@ -126,6 +140,8 @@ Avoid \\begin{align} environments unless necessary; prefer simple lines.`,
 
 ${LANGUAGE_RULE}
 
+${VOICE}
+
 Produce a JSON object matching the schema. The "data_json" field MUST be a
 STRING containing JSON (it will be JSON.parse'd on the client). Pick a
 chart_type and fill data_json accordingly:
@@ -136,14 +152,20 @@ chart_type and fill data_json accordingly:
   chart_type="bars":     data_json = '{"bars":[{"label":"A","value":1.0}, ...]}'
   chart_type="lines":    data_json = '{"series":[{"name":"foo","color":"#5b66f1","points":[[x,y],...]}]}'
 
-Pick sensible domain & sampling. Make the chart visually communicate the
-concept (e.g. range R = v0² sin(2α)/g plotted as α sweeps 0 to 90; or the
-bell curve; or a parabola). Use color hex strings; the chart engine
-renders on a white background.`,
+Choose the chart_type that makes the idea jump out, and pick a domain &
+sampling that frames it well (e.g. range R = v0² sin(2α)/g as α sweeps
+0→90°; a bell curve; a parabola). Give clear, human x_label / y_label.
+Keep data reasonable (≤ ~300 points; ≤ ~12 bars). The chart engine styles
+colors, axes, and gridlines itself, so you don't need to set colors — just
+return clean data. Write the caption to tell the reader what to NOTICE in
+the shape ("steepest near the middle, flat at the tails"), not just what it
+is.`,
 
   "2d-text": `You are Get It.'s visualizer text-source generator.
 
 ${LANGUAGE_RULE}
+
+${VOICE}
 
 Produce a JSON object matching the schema. The viewer expects an
 authoritative card: a title, a short caption, a body in markdown that

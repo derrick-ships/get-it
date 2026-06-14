@@ -66,6 +66,11 @@ GLOBAL NOTE — one short paragraph the student will read first: what this
 document is about, what the spine of the learning path is, and where the
 hardest / most central concepts are. SOURCE LANGUAGE.
 
+VOICE — write summaries and the global note like a sharp, curious friend
+explaining it over coffee, not a textbook. Vivid, concrete, plain-spoken;
+lead with intuition and why it matters; short sentences; no academic
+hedging or jargon dumps. Labels stay terse; summaries earn their keep.
+
 LANGUAGE: detect the source language and write every label, summary,
 relation, and the global note in that language. ids stay lowercase-kebab
 (ASCII).

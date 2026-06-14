@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import type { VizType } from "@/lib/schemas";
 import { VIZ_TYPE_META, vizTypeStyle } from "@/components/Visualizer/viz-meta";
-import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { getDocument, GlobalWorkerOptions, TextLayer } from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { PDFDocumentProxy } from "pdfjs-dist/types/src/display/api";
 
 if (typeof window !== "undefined") {
@@ -42,6 +42,9 @@ type Props = {
   activeTagId: string | null;
   onTagClick: (tagId: string) => void;
   detecting?: boolean;
+  /** Fired when the user highlights text in a page. rect is in viewport
+   *  (fixed) coordinates so a popup can anchor to it. */
+  onTextSelect?: (sel: { text: string; rect: DOMRect; pageIndex: number }) => void;
 };
 
 function truncateTagLabel(label: string): string {
@@ -57,6 +60,7 @@ export default function PdfViewer({
   activeTagId,
   onTagClick,
   detecting,
+  onTextSelect,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
@@ -221,6 +225,7 @@ export default function PdfViewer({
               tags={tags.filter((t) => t.page === i)}
               activeTagId={activeTagId}
               onTagClick={onTagClick}
+              onTextSelect={onTextSelect}
             />
           ))}
         </div>
@@ -356,6 +361,7 @@ function PdfPage({
   tags,
   activeTagId,
   onTagClick,
+  onTextSelect,
 }: {
   pdfDoc: PDFDocumentProxy | null;
   pageNumber: number;
@@ -365,8 +371,10 @@ function PdfPage({
   tags: Tag[];
   activeTagId: string | null;
   onTagClick: (id: string) => void;
+  onTextSelect?: (sel: { text: string; rect: DOMRect; pageIndex: number }) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const textLayerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!pdfDoc || !scale || !canvasRef.current) return;
@@ -394,6 +402,26 @@ function PdfPage({
       } catch {
         /* cancelled */
       }
+      // Selectable text layer (for the ghostreader). Best-effort: if it
+      // fails the page still renders, just without selection.
+      const tld = textLayerRef.current;
+      if (!cancelled && tld) {
+        try {
+          tld.replaceChildren();
+          tld.style.setProperty("--scale-factor", String(scale));
+          const textContent = await page.getTextContent();
+          if (!cancelled) {
+            const layer = new TextLayer({
+              textContentSource: textContent,
+              container: tld,
+              viewport: page.getViewport({ scale }),
+            });
+            await layer.render();
+          }
+        } catch {
+          /* selection is a nice-to-have */
+        }
+      }
       page.cleanup();
     })();
     return () => {
@@ -404,6 +432,19 @@ function PdfPage({
     };
   }, [pdfDoc, pageNumber, scale]);
 
+  const handleMouseUp = () => {
+    if (!onTextSelect) return;
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
+    const text = sel.toString().trim();
+    if (text.length < 2) return;
+    const tld = textLayerRef.current;
+    if (!tld || !sel.anchorNode || !tld.contains(sel.anchorNode)) return;
+    const rect = sel.getRangeAt(0).getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return;
+    onTextSelect({ text, rect, pageIndex: pageNumber - 1 });
+  };
+
   return (
     <div
       data-page={pageNumber - 1}
@@ -412,8 +453,11 @@ function PdfPage({
         width: pdfWidth * scale,
         height: pdfHeight * scale,
       }}
+      onMouseUp={handleMouseUp}
     >
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
+      {/* Selectable text layer (invisible) for the ghostreader. */}
+      <div ref={textLayerRef} className="textLayer" />
       {/* Tag overlay layer */}
       <div className="pointer-events-none absolute inset-0">
         {tags.map((t) => (

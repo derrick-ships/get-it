@@ -43,13 +43,21 @@ export const OLLAMA_BASE_URL = "http://localhost:11434";
  * Curated OpenRouter models that follow JSON-schema instructions well, the
  * first being a sensible default. The user can also type any model id.
  */
+// Suggestions only — the Settings field is free-text, so ANY OpenRouter model
+// id works (openrouter.ai/models has hundreds). These are strong, current
+// defaults across price/quality.
 export const OPENROUTER_MODELS = [
   "openai/gpt-4o-mini",
   "openai/gpt-4o",
   "anthropic/claude-3.7-sonnet",
-  "google/gemini-2.0-flash-001",
-  "meta-llama/llama-3.3-70b-instruct",
+  "anthropic/claude-3.5-haiku",
+  "google/gemini-2.5-flash",
+  "google/gemini-2.5-pro",
   "deepseek/deepseek-chat",
+  "moonshotai/kimi-k2",
+  "x-ai/grok-2-1212",
+  "meta-llama/llama-3.3-70b-instruct",
+  "qwen/qwen-2.5-72b-instruct",
 ] as const;
 
 export const OPENROUTER_DEFAULT_MODEL = OPENROUTER_MODELS[0];
