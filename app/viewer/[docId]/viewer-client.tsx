@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import PdfViewer, { type Tag } from "@/components/PdfViewer";
+import GhostReader, { type GhostSelection } from "@/components/GhostReader";
 import RightPane, { type RightPaneMode } from "@/components/RightPane";
 import AccountButton from "@/components/AccountButton";
 import SettingsButton, { SETTINGS_EVENT } from "@/components/SettingsButton";
@@ -103,6 +104,9 @@ export default function ViewerClient({ docId }: { docId: string }) {
   const [detectionError, setDetectionError] = useState<string | null>(null);
 
   const [activeTagId, setActiveTagId] = useState<string | null>(null);
+
+  // Ghostreader: set when the user highlights text in the document.
+  const [ghost, setGhost] = useState<GhostSelection | null>(null);
 
   // Signature of the active provider/model/key; used to re-run generation
   // only when the AI backend actually changes (not on every settings save).
@@ -505,7 +509,16 @@ export default function ViewerClient({ docId }: { docId: string }) {
             activeTagId={activeTagId}
             onTagClick={handleTagClick}
             detecting={detecting}
+            onTextSelect={setGhost}
           />
+          {ghost && meta && (
+            <GhostReader
+              docId={docId}
+              selection={ghost}
+              contextText={meta.pages[ghost.pageIndex]?.text ?? ""}
+              onClose={() => setGhost(null)}
+            />
+          )}
         </div>
         <div className="flex w-[44%] min-w-[420px] max-w-[720px] flex-col overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-white">
           <RightPane

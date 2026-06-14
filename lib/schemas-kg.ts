@@ -114,6 +114,19 @@ export const chatReplySchema = {
   },
 } as const;
 
+// ── Ghostreader: explain a highlighted passage ─────────────────────────
+
+export const ghostReaderSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["answer"],
+  properties: {
+    answer: { type: "string", minLength: 1, maxLength: 2500 },
+  },
+} as const;
+
+export type GhostReaderResult = { answer: string };
+
 export type ChatReplyResult = { reply: string };
 
 // ── Flashcards: deck generation ────────────────────────────────────────

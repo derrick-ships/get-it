@@ -322,3 +322,33 @@ html[data-platform="win32"] .tab-bar {
   outline: 2px solid var(--ink-900);
   outline-offset: 1px;
 }
+
+/* pdf.js text layer — invisible, selectable spans laid over each page canvas
+   so the ghostreader can read what the user highlights. Spans are positioned
+   by pdf.js using the --scale-factor we set on the container. */
+.textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  opacity: 1;
+  line-height: 1;
+  text-align: initial;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: transparent;
+  z-index: 1;
+}
+.textLayer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+}
+.textLayer span.markedContent {
+  top: 0;
+  height: 0;
+}
+.textLayer ::selection {
+  background: rgba(91, 102, 241, 0.32);
+}

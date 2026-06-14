@@ -9,12 +9,55 @@ type Props = {
   onRuntimeError?: (message: string) => void;
 };
 
-const COLORS = ["#5b66f1", "#d97706", "#db2777", "#7c3aed", "#059669", "#dc2626"];
+// Refined, harmonious palette with strong contrast on white.
+const PALETTE = [
+  "#6366f1", // indigo
+  "#f59e0b", // amber
+  "#ec4899", // pink
+  "#10b981", // emerald
+  "#3b82f6", // blue
+  "#ef4444", // red
+  "#8b5cf6", // violet
+  "#14b8a6", // teal
+];
+const INK = "#0f172a";
+const SUBTLE = "#64748b";
+const GRID = "rgba(15,23,42,0.06)";
+const AXIS = "rgba(15,23,42,0.20)";
 
 function safeFn(expr: string): (x: number) => number {
   // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
   const fn = new Function("Math", "x", `return (${expr});`) as (M: typeof Math, x: number) => number;
   return (x: number) => fn(Math, x);
+}
+
+/** Compact, readable tick label. */
+function fmtNum(v: number): string {
+  if (!Number.isFinite(v)) return "";
+  const a = Math.abs(v);
+  if (a === 0) return "0";
+  if (a >= 1e6) return `${+(v / 1e6).toFixed(1)}M`;
+  if (a >= 1e3) return `${+(v / 1e3).toFixed(1)}k`;
+  if (a < 1) return `${+v.toFixed(2)}`;
+  if (a < 100) return `${+v.toFixed(2)}`;
+  return `${Math.round(v)}`;
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const rr = Math.max(0, Math.min(r, w / 2, Math.abs(h)));
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+function hexA(hex: string, alpha: number): string {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!m) return hex;
+  return `rgba(${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)},${alpha})`;
 }
 
 export default function GraphView({ spec, onRuntimeError }: Props) {
@@ -47,20 +90,37 @@ export default function GraphView({ spec, onRuntimeError }: Props) {
     c.style.width = `${W}px`;
     c.style.height = `${H}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
 
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, W, H);
-
-    const padL = 50;
-    const padR = 20;
-    const padT = 20;
-    const padB = 40;
+    const padL = 58;
+    const padR = 26;
+    const padT = 30;
+    const padB = 50;
     const plotW = W - padL - padR;
     const plotH = H - padT - padB;
 
+    const labelFont = "600 12px ui-sans-serif, system-ui, sans-serif";
+    const tickFont = "500 11px ui-sans-serif, system-ui, sans-serif";
+    const legendFont = "500 11.5px ui-sans-serif, system-ui, sans-serif";
+
+    const drawAxisLabels = () => {
+      ctx.fillStyle = SUBTLE;
+      ctx.font = labelFont;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "alphabetic";
+      ctx.fillText(spec.x_label || "", padL + plotW / 2, H - 14);
+      ctx.save();
+      ctx.translate(16, padT + plotH / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.textBaseline = "top";
+      ctx.fillText(spec.y_label || "", 0, 0);
+      ctx.restore();
+    };
+
     type Pt = [number, number];
     type Series = { name?: string; color: string; points: Pt[] };
-
     const series: Series[] = [];
 
     try {
@@ -70,60 +130,93 @@ export default function GraphView({ spec, onRuntimeError }: Props) {
       } catch (parseErr) {
         throw new Error(`Could not parse graph data_json: ${(parseErr as Error).message}`);
       }
+
+      // ── Bars ──────────────────────────────────────────────────────────
+      if (spec.chart_type === "bars") {
+        const bars = (data.bars as Array<{ label: string; value: number }>) ?? [];
+        if (!bars.length) throw new Error("No bars to plot");
+        const maxV = Math.max(...bars.map((b) => b.value), 0);
+        const minV = Math.min(...bars.map((b) => b.value), 0);
+        const span = maxV - minV || 1;
+        const baseY = padT + plotH - ((0 - minV) / span) * plotH;
+        const slot = plotW / bars.length;
+        const bw = Math.min(slot * 0.62, 64);
+
+        // subtle horizontal guides
+        ctx.strokeStyle = GRID;
+        ctx.lineWidth = 1;
+        ctx.font = tickFont;
+        ctx.fillStyle = SUBTLE;
+        ctx.textAlign = "right";
+        ctx.textBaseline = "middle";
+        for (let i = 0; i <= 4; i++) {
+          const v = minV + (span * i) / 4;
+          const py = padT + plotH - ((v - minV) / span) * plotH;
+          ctx.beginPath();
+          ctx.moveTo(padL, py);
+          ctx.lineTo(padL + plotW, py);
+          ctx.stroke();
+          ctx.fillText(fmtNum(v), padL - 8, py);
+        }
+
+        bars.forEach((b, i) => {
+          const cx = padL + i * slot + slot / 2;
+          const x = cx - bw / 2;
+          const vy = padT + plotH - ((b.value - minV) / span) * plotH;
+          const top = Math.min(vy, baseY);
+          const h = Math.abs(baseY - vy);
+          const color = PALETTE[i % PALETTE.length];
+          const grad = ctx.createLinearGradient(0, top, 0, top + h);
+          grad.addColorStop(0, color);
+          grad.addColorStop(1, hexA(color, 0.72));
+          ctx.fillStyle = grad;
+          roundRect(ctx, x, top, bw, h || 1, 5);
+          ctx.fill();
+          // value
+          ctx.fillStyle = INK;
+          ctx.font = "600 11px ui-sans-serif, system-ui, sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "bottom";
+          ctx.fillText(fmtNum(b.value), cx, top - 5);
+          // label
+          ctx.fillStyle = SUBTLE;
+          ctx.font = tickFont;
+          ctx.textBaseline = "top";
+          const lbl = b.label.length > 14 ? `${b.label.slice(0, 13)}…` : b.label;
+          ctx.fillText(lbl, cx, padT + plotH + 8);
+        });
+        drawAxisLabels();
+        return;
+      }
+
+      // ── Series-based (function / points / lines) ──────────────────────
       if (spec.chart_type === "function") {
         const fn = safeFn((data.fn as string) || "x");
         const xMin = (data.x_min as number) ?? -5;
         const xMax = (data.x_max as number) ?? 5;
-        const samples = Math.max(20, Math.min(2000, (data.samples as number) ?? 200));
+        const samples = Math.max(20, Math.min(2000, (data.samples as number) ?? 240));
         const pts: Pt[] = [];
         for (let i = 0; i <= samples; i++) {
           const x = xMin + ((xMax - xMin) * i) / samples;
           const y = fn(x);
           if (Number.isFinite(y)) pts.push([x, y]);
         }
-        series.push({ color: COLORS[0], points: pts, name: spec.title });
+        series.push({ color: PALETTE[0], points: pts, name: spec.title });
       } else if (spec.chart_type === "points") {
-        const pts = (data.points as Pt[]) ?? [];
-        series.push({ color: COLORS[0], points: pts, name: spec.title });
+        series.push({ color: PALETTE[0], points: (data.points as Pt[]) ?? [], name: spec.title });
       } else if (spec.chart_type === "lines") {
         const ss = (data.series as Array<{ name: string; color?: string; points: Pt[] }>) ?? [];
-        ss.forEach((s, i) => series.push({ name: s.name, color: s.color || COLORS[i % COLORS.length], points: s.points }));
-      } else if (spec.chart_type === "bars") {
-        const bars = (data.bars as Array<{ label: string; value: number }>) ?? [];
-        // draw bars directly
-        const maxV = Math.max(...bars.map((b) => b.value), 1);
-        const bw = (plotW / bars.length) * 0.7;
-        const gap = (plotW / bars.length) * 0.3;
-        ctx.font = "11px ui-sans-serif, system-ui";
-        ctx.textAlign = "center";
-        bars.forEach((b, i) => {
-          const x = padL + i * (bw + gap) + gap / 2;
-          const h = (b.value / maxV) * plotH;
-          const y = padT + plotH - h;
-          ctx.fillStyle = COLORS[i % COLORS.length];
-          ctx.fillRect(x, y, bw, h);
-          ctx.fillStyle = "#2a2c33";
-          ctx.fillText(b.label, x + bw / 2, padT + plotH + 16);
-          ctx.fillStyle = "#6b6e78";
-          ctx.fillText(String(b.value), x + bw / 2, y - 6);
-        });
-        // axis labels
-        ctx.textAlign = "center";
-        ctx.fillStyle = "#6b6e78";
-        ctx.fillText(spec.x_label || "", W / 2, H - 6);
-        ctx.save();
-        ctx.translate(14, H / 2);
-        ctx.rotate(-Math.PI / 2);
-        ctx.fillText(spec.y_label || "", 0, 0);
-        ctx.restore();
-        return;
+        ss.forEach((s, i) =>
+          series.push({ name: s.name, color: s.color || PALETTE[i % PALETTE.length], points: s.points }),
+        );
       }
 
-      // For non-bar charts: compute extents from all series.
       const allPts = series.flatMap((s) => s.points);
       if (!allPts.length) {
-        ctx.fillStyle = "#9f1f3a";
-        ctx.fillText("No data points", 20, 40);
+        ctx.fillStyle = SUBTLE;
+        ctx.font = labelFont;
+        ctx.textAlign = "center";
+        ctx.fillText("No data points to plot", W / 2, H / 2);
         return;
       }
       const xs = allPts.map((p) => p[0]);
@@ -132,27 +225,20 @@ export default function GraphView({ spec, onRuntimeError }: Props) {
       let xMax = Math.max(...xs);
       let yMin = Math.min(...ys);
       let yMax = Math.max(...ys);
-      if (xMin === xMax) {
-        xMin -= 1;
-        xMax += 1;
-      }
-      if (yMin === yMax) {
-        yMin -= 1;
-        yMax += 1;
-      }
-      // Pad y range a touch.
-      const padY = (yMax - yMin) * 0.07;
+      if (xMin === xMax) { xMin -= 1; xMax += 1; }
+      if (yMin === yMax) { yMin -= 1; yMax += 1; }
+      const padY = (yMax - yMin) * 0.08;
       yMin -= padY;
       yMax += padY;
 
       const sx = (x: number) => padL + ((x - xMin) / (xMax - xMin)) * plotW;
       const sy = (y: number) => padT + plotH - ((y - yMin) / (yMax - yMin)) * plotH;
 
-      // Grid + axes
-      ctx.strokeStyle = "rgba(20,22,26,0.08)";
+      // Horizontal gridlines + y ticks
+      ctx.font = tickFont;
+      ctx.fillStyle = SUBTLE;
+      ctx.strokeStyle = GRID;
       ctx.lineWidth = 1;
-      ctx.font = "10px ui-sans-serif, system-ui";
-      ctx.fillStyle = "#6b6e78";
       ctx.textAlign = "right";
       ctx.textBaseline = "middle";
       const yTicks = 5;
@@ -163,93 +249,103 @@ export default function GraphView({ spec, onRuntimeError }: Props) {
         ctx.moveTo(padL, py);
         ctx.lineTo(padL + plotW, py);
         ctx.stroke();
-        ctx.fillText(y.toFixed(Math.abs(y) < 10 ? 2 : 0), padL - 6, py);
+        ctx.fillText(fmtNum(y), padL - 8, py);
       }
+      // x ticks (marks + labels, no full vertical grid for a cleaner look)
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       const xTicks = 6;
       for (let i = 0; i <= xTicks; i++) {
         const x = xMin + ((xMax - xMin) * i) / xTicks;
         const px = sx(x);
+        ctx.strokeStyle = AXIS;
         ctx.beginPath();
-        ctx.moveTo(px, padT);
-        ctx.lineTo(px, padT + plotH);
+        ctx.moveTo(px, padT + plotH);
+        ctx.lineTo(px, padT + plotH + 4);
         ctx.stroke();
-        ctx.fillText(x.toFixed(Math.abs(x) < 10 ? 2 : 0), px, padT + plotH + 4);
+        ctx.fillText(fmtNum(x), px, padT + plotH + 9);
       }
 
-      // Origin axes
-      if (xMin <= 0 && xMax >= 0) {
-        ctx.strokeStyle = "rgba(20,22,26,0.22)";
-        ctx.beginPath();
-        ctx.moveTo(sx(0), padT);
-        ctx.lineTo(sx(0), padT + plotH);
-        ctx.stroke();
-      }
+      // Zero axes (only when in range)
+      ctx.strokeStyle = AXIS;
+      ctx.lineWidth = 1.25;
       if (yMin <= 0 && yMax >= 0) {
-        ctx.strokeStyle = "rgba(20,22,26,0.22)";
         ctx.beginPath();
         ctx.moveTo(padL, sy(0));
         ctx.lineTo(padL + plotW, sy(0));
         ctx.stroke();
       }
 
-      // Series
+      const single = series.length === 1;
+
       series.forEach((s) => {
-        ctx.strokeStyle = s.color;
-        ctx.fillStyle = s.color;
-        ctx.lineWidth = 2;
         if (spec.chart_type === "points") {
           for (const [px, py] of s.points) {
             ctx.beginPath();
-            ctx.arc(sx(px), sy(py), 3, 0, Math.PI * 2);
+            ctx.arc(sx(px), sy(py), 4, 0, Math.PI * 2);
+            ctx.fillStyle = s.color;
             ctx.fill();
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = "#ffffff";
+            ctx.stroke();
           }
-        } else {
+          return;
+        }
+        // Area fill under a single line/function for depth.
+        if (single && s.points.length > 1) {
+          const baseY = sy(Math.max(yMin, Math.min(yMax, 0)));
+          const grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
+          grad.addColorStop(0, hexA(s.color, 0.22));
+          grad.addColorStop(1, hexA(s.color, 0.02));
           ctx.beginPath();
           s.points.forEach(([px, py], i) => {
-            const X = sx(px);
-            const Y = sy(py);
+            const X = sx(px), Y = sy(py);
             if (i === 0) ctx.moveTo(X, Y);
             else ctx.lineTo(X, Y);
           });
-          ctx.stroke();
+          ctx.lineTo(sx(s.points[s.points.length - 1][0]), baseY);
+          ctx.lineTo(sx(s.points[0][0]), baseY);
+          ctx.closePath();
+          ctx.fillStyle = grad;
+          ctx.fill();
         }
+        // Line stroke
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        s.points.forEach(([px, py], i) => {
+          const X = sx(px), Y = sy(py);
+          if (i === 0) ctx.moveTo(X, Y);
+          else ctx.lineTo(X, Y);
+        });
+        ctx.stroke();
       });
 
-      // Legend (lines/points only when multiple series)
+      // Legend (multi-series) — rounded swatches in a soft pill
       if (series.length > 1) {
-        let lx = padL + 10;
-        const ly = padT + 10;
-        ctx.font = "11px ui-sans-serif, system-ui";
-        ctx.textAlign = "left";
+        ctx.font = legendFont;
         ctx.textBaseline = "middle";
-        series.forEach((s) => {
+        ctx.textAlign = "left";
+        const items = series.map((s) => ({ s, w: ctx.measureText(s.name || "").width }));
+        const totalW = items.reduce((acc, it) => acc + 16 + it.w + 16, 0);
+        let lx = padL + Math.max(8, (plotW - totalW) / 2);
+        const ly = padT - 14;
+        items.forEach(({ s, w }) => {
           ctx.fillStyle = s.color;
-          ctx.fillRect(lx, ly - 3, 18, 6);
-          ctx.fillStyle = "#2a2c33";
-          const txt = s.name || "";
-          ctx.fillText(txt, lx + 24, ly);
-          lx += 30 + ctx.measureText(txt).width;
+          ctx.beginPath();
+          ctx.arc(lx + 4, ly, 4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = INK;
+          ctx.fillText(s.name || "", lx + 13, ly);
+          lx += 16 + w + 16;
         });
       }
 
-      // Axis labels
-      ctx.fillStyle = "#6b6e78";
-      ctx.font = "11px ui-sans-serif, system-ui";
-      ctx.textAlign = "center";
-      ctx.fillText(spec.x_label || "x", padL + plotW / 2, H - 8);
-      ctx.save();
-      ctx.translate(14, padT + plotH / 2);
-      ctx.rotate(-Math.PI / 2);
-      ctx.fillText(spec.y_label || "y", 0, 0);
-      ctx.restore();
+      drawAxisLabels();
     } catch (e) {
       console.warn("graph render threw (will be reported for repair):", e);
       reportError(`Graph render failed: ${(e as Error).message}`);
     }
-    // onRuntimeError captured by closure; we don't re-render the chart on
-    // every parent rerender that produces a new function reference.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spec]);
 
