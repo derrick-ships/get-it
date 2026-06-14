@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { loadSettings } from "@/lib/settings-store";
 import { deviceRecommendation } from "@/lib/device";
 import { isOllamaRunning, listOllamaModels } from "@/lib/providers/ollama";
+import { isOllamaInstalled } from "@/lib/local-models";
 import { getOpenRouterKeyInfo } from "@/lib/providers/openrouter";
 
 export const runtime = "nodejs";
@@ -18,9 +19,10 @@ export async function GET() {
   const s = loadSettings();
   const { device, recommended } = deviceRecommendation();
 
-  const [running, models] = await Promise.all([
+  const [running, models, installed] = await Promise.all([
     isOllamaRunning(s.ollamaBaseUrl),
     listOllamaModels(s.ollamaBaseUrl),
+    isOllamaInstalled(),
   ]);
 
   const or = s.openrouterApiKey
@@ -33,6 +35,7 @@ export async function GET() {
     recommended,
     ollama: {
       running,
+      installed: installed || running,
       models,
       baseUrl: s.ollamaBaseUrl,
       selected: s.ollamaModel,

@@ -12,12 +12,15 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
   Check,
   Cloud,
+  Copy,
   Cpu,
   Download,
+  ExternalLink,
   FolderSearch,
   HardDrive,
   KeyRound,
   Loader2,
+  Power,
   RefreshCw,
 } from "lucide-react";
 import { CODEX_MODELS } from "@/lib/codex-models";
@@ -41,6 +44,7 @@ type Status = {
   recommended: { model: string; approxSizeGB: number; note: string };
   ollama: {
     running: boolean;
+    installed: boolean;
     models: string[];
     baseUrl: string;
     selected: string;
@@ -89,6 +93,8 @@ export default function ProviderSettings({ onProviderReady }: { onProviderReady?
   const [pullMsg, setPullMsg] = useState<string | null>(null);
   const [scan, setScan] = useState<LocalScan | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [startMsg, setStartMsg] = useState<string | null>(null);
   const hydrated = useRef(false);
 
   const loadStatus = useCallback(async () => {
@@ -212,6 +218,24 @@ export default function ProviderSettings({ onProviderReady }: { onProviderReady?
     [loadStatus, persist],
   );
 
+  const startOllama = useCallback(async () => {
+    setStarting(true);
+    setStartMsg(null);
+    try {
+      const r = await fetch("/api/providers/ollama/start", { method: "POST" });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.running) {
+        await loadStatus();
+      } else {
+        setStartMsg(j.error || "Couldn't start Ollama.");
+      }
+    } catch {
+      setStartMsg("Couldn't start Ollama.");
+    } finally {
+      setStarting(false);
+    }
+  }, [loadStatus]);
+
   const runScan = useCallback(async () => {
     setScanning(true);
     try {
@@ -223,6 +247,92 @@ export default function ProviderSettings({ onProviderReady }: { onProviderReady?
       setScanning(false);
     }
   }, []);
+
+  // The recommended-model action, in whichever of four states applies:
+  // downloading · already installed · running (Download) · installed-not-running
+  // (Start Ollama) · not installed (Install link + copyable pull command).
+  // Reused in the recommendation card and inline in the scan empty-state.
+  const renderModelAction = () => {
+    if (!status) return null;
+    const model = status.recommended.model;
+
+    if (pullPct != null) {
+      return (
+        <div className="mt-1.5">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-sunken)]">
+            <div
+              className="h-full bg-[var(--accent-600)] transition-all"
+              style={{ width: `${pullPct}%` }}
+            />
+          </div>
+          <p className="mt-1 truncate text-[10.5px] text-[var(--ink-500)]">
+            {pullMsg} {pullPct}%
+          </p>
+        </div>
+      );
+    }
+
+    if (status.ollama.running) {
+      if (status.ollama.recommendedInstalled) {
+        return (
+          <p className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-emerald-600">
+            <Check className="h-3 w-3" /> Installed
+          </p>
+        );
+      }
+      return (
+        <button
+          type="button"
+          onClick={() => downloadModel(model)}
+          className="mt-1.5 inline-flex items-center gap-1.5 rounded-md bg-[var(--accent-600)] px-2.5 py-1 text-[11.5px] font-medium text-white hover:bg-[var(--accent-700)]"
+        >
+          <Download className="h-3 w-3" />
+          Download {model}
+        </button>
+      );
+    }
+
+    if (status.ollama.installed) {
+      return (
+        <div className="mt-1.5">
+          <p className="mb-1 text-[10.5px] text-[var(--ink-500)]">
+            Ollama is installed but not running — start it to download {model}.
+          </p>
+          <button
+            type="button"
+            onClick={startOllama}
+            disabled={starting}
+            className="inline-flex items-center gap-1.5 rounded-md bg-[var(--accent-600)] px-2.5 py-1 text-[11.5px] font-medium text-white hover:bg-[var(--accent-700)] disabled:opacity-50"
+          >
+            {starting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Power className="h-3 w-3" />}
+            {starting ? "Starting…" : "Start Ollama"}
+          </button>
+          {startMsg && <p className="mt-1 text-[10.5px] text-rose-600">{startMsg}</p>}
+        </div>
+      );
+    }
+
+    // Not installed — guide the install instead of dead-ending.
+    return (
+      <div className="mt-1.5">
+        <p className="mb-1 text-[10.5px] text-[var(--ink-500)]">
+          Install Ollama (free) to run {model} locally, then come back and download it.
+        </p>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <a
+            href="https://ollama.com/download"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-md bg-[var(--accent-600)] px-2.5 py-1 text-[11.5px] font-medium text-white hover:bg-[var(--accent-700)]"
+          >
+            <ExternalLink className="h-3 w-3" />
+            Install Ollama
+          </a>
+          <CopyCmd text={`ollama pull ${model}`} />
+        </div>
+      </div>
+    );
+  };
 
   if (!settings) {
     return (
@@ -389,33 +499,7 @@ export default function ProviderSettings({ onProviderReady }: { onProviderReady?
               <p className="mt-0.5 text-[10.5px] leading-snug text-[var(--ink-400)]">
                 {status.recommended.note}
               </p>
-              {pullPct != null ? (
-                <div className="mt-1.5">
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-sunken)]">
-                    <div
-                      className="h-full bg-[var(--accent-600)] transition-all"
-                      style={{ width: `${pullPct}%` }}
-                    />
-                  </div>
-                  <p className="mt-1 truncate text-[10.5px] text-[var(--ink-500)]">
-                    {pullMsg} {pullPct}%
-                  </p>
-                </div>
-              ) : status.ollama.recommendedInstalled ? (
-                <p className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-emerald-600">
-                  <Check className="h-3 w-3" /> Installed
-                </p>
-              ) : (
-                <button
-                  type="button"
-                  disabled={!status.ollama.running}
-                  onClick={() => downloadModel(status.recommended.model)}
-                  className="mt-1.5 inline-flex items-center gap-1.5 rounded-md bg-[var(--accent-600)] px-2.5 py-1 text-[11.5px] font-medium text-white hover:bg-[var(--accent-700)] disabled:opacity-50"
-                >
-                  <Download className="h-3 w-3" />
-                  Download {status.recommended.model}
-                </button>
-              )}
+              {renderModelAction()}
             </div>
           )}
 
@@ -449,12 +533,28 @@ export default function ProviderSettings({ onProviderReady }: { onProviderReady?
             {scan && (
               <div className="mt-2 space-y-1.5">
                 {scan.models.length === 0 ? (
-                  <p className="text-[11px] text-[var(--ink-500)]">
-                    No local models found in the usual places. If yours lives
-                    somewhere unusual, add that folder to{" "}
-                    <code className="text-[var(--ink-600)]">localModelDirs</code>{" "}
-                    and scan again.
-                  </p>
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] text-[var(--ink-500)]">
+                      No local models found in the usual places. Download the
+                      recommended one below, or — if yours lives somewhere
+                      unusual — add that folder to{" "}
+                      <code className="text-[var(--ink-600)]">localModelDirs</code>{" "}
+                      and scan again.
+                    </p>
+                    {status && (
+                      <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-sunken)]/40 p-2">
+                        <div className="flex items-center gap-1.5 text-[11px] text-[var(--ink-600)]">
+                          <Cpu className="h-3 w-3" />
+                          Recommended:{" "}
+                          <span className="font-medium text-[var(--ink-900)]">
+                            {status.recommended.model}
+                          </span>{" "}
+                          (~{status.recommended.approxSizeGB} GB)
+                        </div>
+                        {renderModelAction()}
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   scan.models.map((m) => (
                     <LocalModelRow
@@ -471,6 +571,30 @@ export default function ProviderSettings({ onProviderReady }: { onProviderReady?
         </div>
       )}
     </div>
+  );
+}
+
+/** Copy-to-clipboard chip for a shell command (e.g. the manual `ollama pull`). */
+function CopyCmd({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1200);
+        } catch {
+          /* clipboard unavailable — the text is visible to copy by hand */
+        }
+      }}
+      title="Copy command"
+      className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border-subtle)] bg-white px-2 py-1 text-[11px] font-medium text-[var(--ink-700)] hover:border-[var(--border-strong)]"
+    >
+      {copied ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+      <code className="text-[var(--ink-600)]">{text}</code>
+    </button>
   );
 }
 
