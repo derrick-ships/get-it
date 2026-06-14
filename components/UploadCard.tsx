@@ -101,6 +101,7 @@ export default function UploadCard() {
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [progress, setProgress] = useState<{ i: number; n: number } | null>(null);
+  const [combine, setCombine] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -160,6 +161,35 @@ export default function UploadCard() {
         notes.push(`Only the first ${MAX_FILES} files were uploaded.`);
       }
 
+      // Combine mode: merge all files into ONE continuous document server-side
+      // so the knowledge graph and animations span every file. One request.
+      if (combine && batch.length > 1) {
+        setBusy("combine");
+        setProgress({ i: batch.length, n: batch.length });
+        try {
+          const fd = new FormData();
+          for (const f of batch) fd.append("file", f);
+          fd.set("combine", "true");
+          const r = await fetch("/api/upload", { method: "POST", body: fd });
+          setProgress(null);
+          if (!r.ok) {
+            const msg =
+              (await r.json().catch(() => ({} as { error?: string }))).error ??
+              "combine failed";
+            setBusy(null);
+            setError(`Couldn't combine these files: ${msg}`);
+            return;
+          }
+          const j = await r.json();
+          router.push(`/viewer/${j.docId}`);
+        } catch (e) {
+          setProgress(null);
+          setBusy(null);
+          setError((e as Error).message);
+        }
+        return;
+      }
+
       let okCount = 0;
       let firstDocId: string | null = null;
       const failures: string[] = [];
@@ -209,7 +239,7 @@ export default function UploadCard() {
         router.push(`/library`);
       }
     },
-    [router],
+    [router, combine],
   );
 
   return (
@@ -284,13 +314,15 @@ export default function UploadCard() {
           ))}
         </div>
         <p className="flex flex-wrap items-center justify-center gap-2 text-[14px] text-[var(--ink-700)]">
-          {busy === "upload" ? (
+          {busy === "upload" || busy === "combine" ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin text-[var(--accent-600)]" />
               <span className="font-medium text-[var(--ink-900)]">
-                {progress && progress.n > 1
-                  ? `Uploading and parsing ${progress.i} of ${progress.n}…`
-                  : "Uploading and parsing…"}
+                {busy === "combine"
+                  ? `Combining ${progress?.n ?? ""} files into one document…`
+                  : progress && progress.n > 1
+                    ? `Uploading and parsing ${progress.i} of ${progress.n}…`
+                    : "Uploading and parsing…"}
               </span>
             </>
           ) : (
@@ -307,6 +339,18 @@ export default function UploadCard() {
           Text-tagged PDFs work best. No OCR. .txt and .md welcome.
         </p>
       </div>
+
+      {/* Combine toggle — merges several files into one continuous document so
+          the knowledge graph and animations span all of them. */}
+      <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 text-[12.5px] text-[var(--ink-600)]">
+        <input
+          type="checkbox"
+          checked={combine}
+          onChange={(e) => setCombine(e.target.checked)}
+          className="h-3.5 w-3.5 rounded border-[var(--border-default)] accent-[var(--accent-600)]"
+        />
+        Combine multiple files into one document — one shared knowledge graph &amp; animations
+      </label>
 
       {/* Upload error / rejected-document alert — prominent, right under the
           drop zone so the cause is obvious the moment a bad PDF is refused. */}

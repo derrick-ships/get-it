@@ -69,6 +69,7 @@ export async function POST(
           ? b.activeTagId
           : (current?.activeTagId ?? null),
     pagesAnalyzed: current?.pagesAnalyzed ?? [],
+    detectionError: current?.detectionError ?? null,
   });
   return NextResponse.json({ ok: true });
 }

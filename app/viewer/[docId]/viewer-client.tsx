@@ -45,11 +45,38 @@ type TagsApiResponse = {
     tags: TagState[];
     activeTagId: string | null;
     pagesAnalyzed: number[];
+    detectionError?: string | null;
   } | null;
   detectionRunning: boolean;
   vizQueueRunning: boolean;
   numPages: number;
 };
+
+/** The provider/model/credential fields whose change should re-trigger
+ *  generation. Comparing a signature avoids re-running on unrelated setting
+ *  toggles (auto-generate, repair budget). */
+type SettingsLike = {
+  autoGenerate?: boolean;
+  maxRetries?: number;
+  provider?: string;
+  codexModel?: string;
+  openrouterModel?: string;
+  openrouterApiKey?: string;
+  ollamaModel?: string;
+  ollamaBaseUrl?: string;
+};
+function providerSig(s: SettingsLike): string {
+  return [
+    s.provider,
+    s.codexModel,
+    s.openrouterModel,
+    s.openrouterApiKey,
+    s.ollamaModel,
+    s.ollamaBaseUrl,
+  ]
+    .map((x) => x ?? "")
+    .join("|");
+}
 
 const FILENAME_TO_TITLE: Record<string, string> = {
   "anatomy.pdf": "Anatomy & Physiology",
@@ -73,8 +100,13 @@ export default function ViewerClient({ docId }: { docId: string }) {
   const [pagesAnalyzed, setPagesAnalyzed] = useState<Set<number>>(new Set());
   const [detectionRunning, setDetectionRunning] = useState(false);
   const [vizQueueRunning, setVizQueueRunning] = useState(false);
+  const [detectionError, setDetectionError] = useState<string | null>(null);
 
   const [activeTagId, setActiveTagId] = useState<string | null>(null);
+
+  // Signature of the active provider/model/key; used to re-run generation
+  // only when the AI backend actually changes (not on every settings save).
+  const providerSigRef = useRef<string | null>(null);
 
   // Settings (auto-generate, max repair attempts) — start from env-baked
   // defaults, hydrate from /api/settings, react to `getit:settings`
@@ -86,10 +118,11 @@ export default function ViewerClient({ docId }: { docId: string }) {
     let cancelled = false;
     fetch("/api/settings", { cache: "no-store" })
       .then((r) => r.json())
-      .then((s: { autoGenerate: boolean; maxRetries: number }) => {
+      .then((s: SettingsLike) => {
         if (cancelled) return;
         if (typeof s.autoGenerate === "boolean") setAutoGenerate(s.autoGenerate);
         if (typeof s.maxRetries === "number") setMaxRetries(s.maxRetries);
+        providerSigRef.current = providerSig(s);
       })
       .catch(() => {});
     return () => {
@@ -99,16 +132,28 @@ export default function ViewerClient({ docId }: { docId: string }) {
 
   useEffect(() => {
     const onChange = (e: Event) => {
-      const detail = (e as CustomEvent).detail as
-        | { autoGenerate?: boolean; maxRetries?: number }
-        | undefined;
+      const detail = (e as CustomEvent).detail as SettingsLike | undefined;
       if (!detail) return;
       if (typeof detail.autoGenerate === "boolean") setAutoGenerate(detail.autoGenerate);
       if (typeof detail.maxRetries === "number") setMaxRetries(detail.maxRetries);
+
+      // Re-run generation when (and only when) the AI provider/model/key
+      // actually changes: reset detection so previously-analyzed pages are
+      // re-examined by the new model, and re-kick the KG build (it rebuilds
+      // from an error/missing state). This is the "try again when I switch
+      // providers" behaviour.
+      const nextSig = providerSig(detail);
+      const prevSig = providerSigRef.current;
+      providerSigRef.current = nextSig;
+      if (prevSig !== null && nextSig !== prevSig) {
+        setDetectionError(null);
+        void fetch(`/api/jobs/detect/${docId}?reset=true`, { method: "POST" }).catch(() => {});
+        void fetch(`/api/kg/${docId}/build`, { method: "POST" }).catch(() => {});
+      }
     };
     window.addEventListener(SETTINGS_EVENT, onChange);
     return () => window.removeEventListener(SETTINGS_EVENT, onChange);
-  }, []);
+  }, [docId]);
 
   // Right-pane mode (Visualizer / KG / Chat / Flashcards / Feynman) —
   // tab-scoped, sessionStorage backed so a reload restores it.
@@ -240,6 +285,7 @@ export default function ViewerClient({ docId }: { docId: string }) {
         lastSavedAtRef.current = file.savedAt;
         setTags(file.tags as TagState[]);
         setPagesAnalyzed(new Set(file.pagesAnalyzed));
+        setDetectionError(file.detectionError ?? null);
         // Only honor the server's active tag if the user hasn't picked
         // one locally yet — otherwise the server's stale value would
         // override a fresh click.
@@ -481,11 +527,15 @@ export default function ViewerClient({ docId }: { docId: string }) {
                 : undefined,
               emptyHint: activeTag?.error
                 ? "We weren't able to build a working visualization for this concept. Retry below, or pick another tag — most of them work cleanly."
-                : tags.length === 0
-                  ? "codex is reading the document — tags will appear inline as soon as they're detected."
-                  : autoGenerate
-                    ? "Click any colored tag in the document to render its concept here."
-                    : "Click any tag to generate its visualization. (manual mode — toggle auto-generate in settings)",
+                : tags.length === 0 && detectionError
+                  ? `Tag detection stopped — ${detectionError} Switch your AI provider or model in Settings to try again.`
+                  : tags.length === 0
+                    ? detecting
+                      ? "Reading the document — concept tags appear in the text on the left as they're found, then you click a tag to render it here. (The icons above are just a legend of the five visual types.)"
+                      : "No tags found yet. Click a colored tag in the document text to render it here — or switch AI provider in Settings if none appear. (The icons above are a legend of the five visual types, not buttons.)"
+                    : autoGenerate
+                      ? "Click any colored tag in the document to render its concept here."
+                      : "Click any tag to generate its visualization. (manual mode — toggle auto-generate in settings)",
               activeTagError: activeTag?.error ?? null,
               onRetry: activeTag ? () => handleTagClick(activeTag.id) : undefined,
             }}
