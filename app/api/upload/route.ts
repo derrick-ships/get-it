@@ -39,6 +39,7 @@ import {
 } from "@/lib/text-to-pdf";
 import { ensureDocDir, originalPath, pdfPath } from "@/lib/paths";
 import { getDoc, newDocId, saveDoc } from "@/lib/store";
+import { PDFDocument } from "pdf-lib";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -107,123 +108,180 @@ function rejectResponse(
   );
 }
 
-export async function POST(req: Request) {
-  let buffer: Buffer;
-  let filename = "uploaded.pdf";
-  let presetDocId: string | null = null;
+/** Validate one uploaded file and return its PDF bytes (pdf as-is, or .txt/.md
+ *  converted via textToPdf). Returns a discriminated union so callers can
+ *  forward the exact error response. */
+type ConvertOk = {
+  ok: true;
+  pdf: Buffer;
+  kind: SourceKind;
+  originalBytes: Buffer | null;
+  filename: string;
+};
+type ConvertErr = { ok: false; status: number; body: Record<string, unknown> };
 
-  const ct = req.headers.get("content-type") || "";
-  if (ct.includes("multipart/form-data")) {
-    const form = await req.formData();
-    const sample = form.get("sample");
-    if (typeof sample === "string" && sample) {
-      const safe = sample.replace(/[^a-z0-9-]/gi, "");
-      const sampleDocId = SAMPLE_NAME_TO_DOC_ID[safe];
-      if (!sampleDocId) {
-        return NextResponse.json({ error: "unknown sample" }, { status: 400 });
-      }
-      // Already in the library? Reuse it.
-      const existing = getDoc(sampleDocId);
-      if (existing) {
-        return NextResponse.json({
-          docId: existing.id,
-          filename: existing.filename,
-          pdfUrl: existing.pdfUrl,
-          numPages: existing.extracted.numPages,
-          pages: existing.extracted.pages.map((p) => ({
-            pageIndex: p.pageIndex,
-            width: p.width,
-            height: p.height,
-            text: p.text,
-          })),
-        });
-      }
-      const p = path.join(process.cwd(), "public", "pdfs", `${safe}.pdf`);
-      buffer = await fs.readFile(p);
-      filename = `${safe}.pdf`;
-      presetDocId = sampleDocId;
-    } else {
-      const file = form.get("file");
-      if (!(file instanceof Blob)) {
-        return NextResponse.json({ error: "no file" }, { status: 400 });
-      }
-      buffer = Buffer.from(await file.arrayBuffer());
-      const fname = (file as unknown as { name?: string }).name;
-      if (fname) filename = fname.replace(/[^a-z0-9._-]/gi, "_");
-    }
-  } else {
-    return NextResponse.json({ error: "expected multipart/form-data" }, { status: 400 });
-  }
-
+async function fileToPdfBuffer(
+  file: Blob,
+  rawName: string | undefined,
+): Promise<ConvertOk | ConvertErr> {
+  const filename = (rawName ?? "uploaded.pdf").replace(/[^a-z0-9._-]/gi, "_");
   const kind = kindOf(filename);
   if (!kind) {
-    return NextResponse.json(
-      { error: "Unsupported file type. Get It. accepts .pdf, .txt, and .md files." },
-      { status: 400 },
-    );
+    return {
+      ok: false,
+      status: 400,
+      body: { error: "Unsupported file type. Get It. accepts .pdf, .txt, and .md files." },
+    };
   }
-
-  // Raw .txt/.md bytes — persisted next to the converted PDF below.
-  let originalBytes: Buffer | null = null;
+  let buffer: Buffer = Buffer.from(await file.arrayBuffer());
 
   if (kind === "pdf") {
-    // Sanity: must look like a PDF.
     if (buffer.subarray(0, 5).toString("ascii") !== "%PDF-") {
-      return NextResponse.json({ error: "not a PDF" }, { status: 400 });
+      return { ok: false, status: 400, body: { error: `"${filename}" isn't a PDF.` } };
     }
+    return { ok: true, pdf: buffer, kind, originalBytes: null, filename };
+  }
+
+  // Text upload: size / binary / utf-8 / budget gates, then convert to PDF.
+  if (buffer.length > MAX_TEXT_BYTES) {
+    return {
+      ok: false,
+      status: 422,
+      body: { error: `"${filename}" is ${(buffer.length / 1024 / 1024).toFixed(1)} MB of text — far more than ${MAX_PDF_PAGES} pages.` },
+    };
+  }
+  if (buffer.includes(0)) {
+    return {
+      ok: false,
+      status: 422,
+      body: { error: `"${filename}" isn't plain text — it looks like a binary file with a .txt/.md name.` },
+    };
+  }
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+  } catch {
+    return {
+      ok: false,
+      status: 422,
+      body: { error: `"${filename}" isn't valid UTF-8 text. Re-save it with UTF-8 encoding.` },
+    };
+  }
+  if (text.length > MAX_TEXT_CHARS) {
+    return {
+      ok: false,
+      status: 422,
+      body: {
+        error: rejectionMessage(
+          "too_many_pages",
+          { numPages: Math.ceil(text.length / CHARS_PER_PAGE_ESTIMATE), textPages: 0, totalAlnum: 0, richRatio: 0 },
+          kind,
+        ),
+        code: "too_many_pages",
+      },
+    };
+  }
+  const converted = await textToPdf(text, { kind, title: filename });
+  if (converted.totalChars > 0 && converted.replacedChars / converted.totalChars > 0.2) {
+    return {
+      ok: false,
+      status: 422,
+      body: { error: `"${filename}" is mostly characters Get It. can't render yet (e.g. Cyrillic or CJK). Latin-script text works best for now.` },
+    };
+  }
+  const originalBytes = buffer;
+  buffer = converted.pdf;
+  return { ok: true, pdf: buffer, kind, originalBytes, filename };
+}
+
+/** Concatenate several PDFs into one. Throws if a source is encrypted/corrupt. */
+async function mergePdfs(buffers: Buffer[]): Promise<Buffer> {
+  const out = await PDFDocument.create();
+  for (const b of buffers) {
+    const src = await PDFDocument.load(b);
+    const pages = await out.copyPages(src, src.getPageIndices());
+    for (const p of pages) out.addPage(p);
+  }
+  return Buffer.from(await out.save());
+}
+
+export async function POST(req: Request) {
+  const ct = req.headers.get("content-type") || "";
+  if (!ct.includes("multipart/form-data")) {
+    return NextResponse.json({ error: "expected multipart/form-data" }, { status: 400 });
+  }
+  const form = await req.formData();
+
+  let buffer: Buffer;
+  let filename: string;
+  let kind: SourceKind;
+  let originalBytes: Buffer | null = null;
+  let presetDocId: string | null = null;
+
+  const sample = form.get("sample");
+  if (typeof sample === "string" && sample) {
+    const safe = sample.replace(/[^a-z0-9-]/gi, "");
+    const sampleDocId = SAMPLE_NAME_TO_DOC_ID[safe];
+    if (!sampleDocId) {
+      return NextResponse.json({ error: "unknown sample" }, { status: 400 });
+    }
+    // Already in the library? Reuse it.
+    const existing = getDoc(sampleDocId);
+    if (existing) {
+      return NextResponse.json({
+        docId: existing.id,
+        filename: existing.filename,
+        pdfUrl: existing.pdfUrl,
+        numPages: existing.extracted.numPages,
+        pages: existing.extracted.pages.map((p) => ({
+          pageIndex: p.pageIndex,
+          width: p.width,
+          height: p.height,
+          text: p.text,
+        })),
+      });
+    }
+    buffer = await fs.readFile(path.join(process.cwd(), "public", "pdfs", `${safe}.pdf`));
+    filename = `${safe}.pdf`;
+    kind = "pdf";
   } else {
-    // Text uploads have no magic bytes — validate by size, binary sniff,
-    // and a strict UTF-8 decode, then convert to PDF so the rest of the
-    // pipeline runs unchanged.
-    if (buffer.length > MAX_TEXT_BYTES) {
-      return NextResponse.json(
-        {
-          error: `This file is ${(buffer.length / 1024 / 1024).toFixed(1)} MB of text — far more than ${MAX_PDF_PAGES} pages. Try a single chapter or a shorter file.`,
-        },
-        { status: 422 },
-      );
+    const files = form.getAll("file").filter((f): f is File => typeof f !== "string");
+    if (files.length === 0) {
+      return NextResponse.json({ error: "no file" }, { status: 400 });
     }
-    if (buffer.includes(0)) {
-      return NextResponse.json(
-        { error: "This file isn't plain text — it looks like a binary file with a .txt/.md name. Try exporting it as real UTF-8 text." },
-        { status: 422 },
-      );
+    const combine = form.get("combine") === "true" && files.length > 1;
+
+    if (combine) {
+      // Convert every file to PDF, then concatenate into ONE document so the
+      // existing pipeline (extraction → detection → tags → KG → viewer) treats
+      // them as a single continuous document — cross-file graph + animations.
+      const pdfs: Buffer[] = [];
+      const names: string[] = [];
+      for (const f of files) {
+        const r = await fileToPdfBuffer(f, f.name);
+        if (!r.ok) return NextResponse.json(r.body, { status: r.status });
+        pdfs.push(r.pdf);
+        names.push(r.filename);
+      }
+      try {
+        buffer = await mergePdfs(pdfs);
+      } catch {
+        return NextResponse.json(
+          { error: "One of the files couldn't be combined — it may be encrypted or corrupted. Remove it and try again." },
+          { status: 422 },
+        );
+      }
+      const firstBase = names[0].replace(/\.(pdf|txt|md|markdown)$/i, "");
+      filename = `${firstBase} + ${files.length - 1} more`;
+      kind = "pdf";
+    } else {
+      const r = await fileToPdfBuffer(files[0], files[0].name);
+      if (!r.ok) return NextResponse.json(r.body, { status: r.status });
+      buffer = r.pdf;
+      filename = r.filename;
+      kind = r.kind;
+      originalBytes = r.originalBytes;
     }
-    let text: string;
-    try {
-      text = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
-    } catch {
-      return NextResponse.json(
-        { error: "This file isn't valid UTF-8 text. Re-save it with UTF-8 encoding, then upload again." },
-        { status: 422 },
-      );
-    }
-    if (text.length > MAX_TEXT_CHARS) {
-      return rejectResponse(
-        "too_many_pages",
-        {
-          numPages: Math.ceil(text.length / CHARS_PER_PAGE_ESTIMATE),
-          textPages: 0,
-          totalAlnum: 0,
-          richRatio: 0,
-        },
-        kind,
-      );
-    }
-    const converted = await textToPdf(text, { kind, title: filename });
-    // pdfkit's built-in fonts are WinAnsi-only; if most of the file became
-    // "?" (CJK, Cyrillic, …) the study material would be garbage — refuse.
-    if (
-      converted.totalChars > 0 &&
-      converted.replacedChars / converted.totalChars > 0.2
-    ) {
-      return NextResponse.json(
-        { error: "This file is mostly written in characters Get It. can't render yet (for example Cyrillic or CJK scripts). Latin-script text works best for now." },
-        { status: 422 },
-      );
-    }
-    originalBytes = buffer;
-    buffer = converted.pdf;
   }
 
   // Extract FIRST, from the in-memory bytes, so we can gate the document

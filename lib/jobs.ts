@@ -29,7 +29,7 @@
  * the library poll never see torn JSON.
  */
 
-import { CodexError } from "./codex";
+import { CodexError, toCodexErrorPayload } from "./codex";
 import { detectConceptsForPages } from "./agents/detect";
 import { generateVizSpec } from "./agents/viz";
 import { locateAnchor } from "./pdf-extract";
@@ -85,6 +85,7 @@ function mergeTagsFile(
     tags: after.tags,
     activeTagId: after.activeTagId,
     pagesAnalyzed: after.pagesAnalyzed,
+    detectionError: after.detectionError ?? null,
   });
   return loadTags(docId)!;
 }
@@ -100,13 +101,37 @@ export function isDetectionRunning(docId: string): boolean {
 export function ensureDetection(docId: string): void {
   if (detectionInFlight.has(docId)) return;
   const p = runDetection(docId)
-    .catch((e) =>
-      console.warn("[jobs/detect]", docId, e instanceof Error ? e.message : e),
-    )
+    .then(() => {
+      // Clean pass — drop any stale error so the viewer stops showing it.
+      mergeTagsFile(docId, (f) => ({ ...f, detectionError: null }));
+    })
+    .catch((e) => {
+      console.warn("[jobs/detect]", docId, e instanceof Error ? e.message : e);
+      // Persist the account-level reason so the viewer can show it + a retry,
+      // instead of a silent empty "Pick a tag to begin".
+      const { message } = toCodexErrorPayload(e);
+      mergeTagsFile(docId, (f) => ({ ...f, detectionError: message }));
+    })
     .finally(() => {
       detectionInFlight.delete(docId);
     });
   detectionInFlight.set(docId, p);
+}
+
+/**
+ * Wipe detection state so the next `ensureDetection` re-runs every page from
+ * scratch. Used when the user switches AI provider/model — pages already
+ * marked "analyzed" (including ones a bad model returned nothing for) must be
+ * re-examined by the new model, not skipped.
+ */
+export function resetDetection(docId: string): void {
+  mergeTagsFile(docId, (file) => ({
+    ...file,
+    tags: [],
+    activeTagId: null,
+    pagesAnalyzed: [],
+    detectionError: null,
+  }));
 }
 
 async function runDetection(docId: string) {

@@ -46,10 +46,10 @@ export const OLLAMA_BASE_URL = "http://localhost:11434";
 export const OPENROUTER_MODELS = [
   "openai/gpt-4o-mini",
   "openai/gpt-4o",
-  "anthropic/claude-3.5-sonnet",
+  "anthropic/claude-3.7-sonnet",
   "google/gemini-2.0-flash-001",
   "meta-llama/llama-3.3-70b-instruct",
-  "qwen/qwen-2.5-72b-instruct",
+  "deepseek/deepseek-chat",
 ] as const;
 
 export const OPENROUTER_DEFAULT_MODEL = OPENROUTER_MODELS[0];

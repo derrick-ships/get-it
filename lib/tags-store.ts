@@ -40,6 +40,9 @@ export type PersistedTagsFile = {
   tags: PersistedTagServer[];
   activeTagId: string | null;
   pagesAnalyzed: number[];
+  /** Account-level reason detection stopped (provider/auth/rate-limit), or
+   *  null/undefined when the last pass was clean. Surfaced in the viewer. */
+  detectionError?: string | null;
 };
 
 const VERSION = 1 as const;

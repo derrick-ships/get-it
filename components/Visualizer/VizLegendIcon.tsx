@@ -13,7 +13,6 @@ export default function VizLegendIcon({ type }: { type: VizType }) {
       role="img"
       aria-label={label}
       aria-describedby={tooltipId}
-      tabIndex={0}
     >
       <Icon className="h-4 w-4" aria-hidden />
       <span id={tooltipId} className="viz-tooltip" role="tooltip">
