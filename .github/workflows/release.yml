@@ -187,6 +187,10 @@ jobs:
   publish:
     name: Create GitHub Release
     needs: build
+    # Publish whatever platforms succeeded even if one matrix leg failed on a
+    # transient infra flake (e.g. a runner DNS hiccup downloading electron-
+    # builder tools). A single platform must not block the whole release.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Resolve tag
@@ -204,12 +208,17 @@ jobs:
           path: artifacts
 
       - name: Flatten artifact layout
+        id: flatten
         run: |
           mkdir -p release
           find artifacts -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.AppImage" \) -exec cp {} release/ \;
-          ls -lh release
+          ls -lh release || true
+          count=$(find release -type f | wc -l | tr -d ' ')
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "Collected $count installer(s)."
 
       - name: Create Release
+        if: ${{ steps.flatten.outputs.count != '0' }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
