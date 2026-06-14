@@ -324,30 +324,45 @@ html[data-platform="win32"] .tab-bar {
 }
 
 /* pdf.js text layer — invisible, selectable spans laid over each page canvas
-   so the ghostreader can read what the user highlights. Spans are positioned
-   by pdf.js using the --scale-factor we set on the container. */
+   so the ghostreader can read what the user highlights. These rules mirror
+   pdfjs-dist's own pdf_viewer.css: the container and spans are sized from
+   --total-scale-factor (set per render in PdfViewer), and each span needs the
+   font-size + transform below or it renders at the browser default and drifts
+   off the rendered glyphs — which is what scrambles the selected text. */
 .textLayer {
   position: absolute;
+  text-align: initial;
   inset: 0;
   overflow: clip;
   opacity: 1;
   line-height: 1;
-  text-align: initial;
+  text-size-adjust: none;
   forced-color-adjust: none;
   transform-origin: 0 0;
   caret-color: transparent;
   z-index: 1;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
 }
 .textLayer :is(span, br) {
   color: transparent;
   position: absolute;
   white-space: pre;
   cursor: text;
-  transform-origin: 0 0;
+  transform-origin: 0% 0%;
 }
-.textLayer span.markedContent {
-  top: 0;
-  height: 0;
+.textLayer > :not(.markedContent),
+.textLayer .markedContent span:not(.markedContent) {
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x))
+    scale(var(--min-font-size-inv));
+}
+.textLayer .markedContent {
+  display: contents;
 }
 .textLayer ::selection {
   background: rgba(91, 102, 241, 0.32);
