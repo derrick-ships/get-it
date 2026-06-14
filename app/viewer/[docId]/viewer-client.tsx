@@ -9,11 +9,15 @@ import {
   MousePointerClick,
   Upload,
   BookOpen,
+  BookOpenText,
+  Moon,
+  Sun,
   Tag as TagIcon,
   Network,
 } from "lucide-react";
 
 import PdfViewer, { type Tag } from "@/components/PdfViewer";
+import ReaderView, { type ReaderTheme } from "@/components/ReaderView";
 import GhostReader, { type GhostSelection } from "@/components/GhostReader";
 import RightPane, { type RightPaneMode } from "@/components/RightPane";
 import AccountButton from "@/components/AccountButton";
@@ -107,6 +111,35 @@ export default function ViewerClient({ docId }: { docId: string }) {
 
   // Ghostreader: set when the user highlights text in the document.
   const [ghost, setGhost] = useState<GhostSelection | null>(null);
+
+  // Left-panel surface: the clean Reader is the default; the raw PDF is one
+  // click away. Tab-scoped (sessionStorage) so a reload restores the choice.
+  const [docView, setDocView] = useState<"reader" | "pdf">(() => {
+    if (typeof window === "undefined") return "reader";
+    return window.sessionStorage.getItem(`getit:${docId}:doc-view`) === "pdf" ? "pdf" : "reader";
+  });
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(`getit:${docId}:doc-view`, docView);
+    } catch {
+      /* noop */
+    }
+  }, [docId, docView]);
+
+  // Reader light/dark theme — a reading preference, persisted across docs.
+  const [readerTheme, setReaderTheme] = useState<ReaderTheme>(() => {
+    if (typeof window === "undefined") return "light";
+    const saved = window.localStorage.getItem("getit:reader-theme");
+    if (saved === "light" || saved === "dark") return saved;
+    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("getit:reader-theme", readerTheme);
+    } catch {
+      /* noop */
+    }
+  }, [readerTheme]);
 
   // Signature of the active provider/model/key; used to re-run generation
   // only when the AI backend actually changes (not on every settings save).
@@ -500,17 +533,50 @@ export default function ViewerClient({ docId }: { docId: string }) {
       </div>
 
       <div className="flex min-h-0 flex-1 gap-2 bg-[var(--surface-canvas)] p-2">
-        <div className="min-w-0 flex-1 overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-white">
-          <PdfViewer
-            pdfUrl={meta.pdfUrl}
-            numPages={meta.numPages}
-            pageDims={meta.pages.map((p) => ({ width: p.width, height: p.height }))}
-            tags={tags}
-            activeTagId={activeTagId}
-            onTagClick={handleTagClick}
-            detecting={detecting}
-            onTextSelect={setGhost}
-          />
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-white">
+          {/* Surface toggle: Reader (default) ⇄ PDF, plus reader theme. */}
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--border-subtle)] px-2 py-1.5">
+            <div className="flex items-center gap-0.5 rounded-lg bg-[var(--surface-sunken)] p-0.5">
+              <SurfaceTab active={docView === "reader"} onClick={() => setDocView("reader")} Icon={BookOpenText}>
+                Reader
+              </SurfaceTab>
+              <SurfaceTab active={docView === "pdf"} onClick={() => setDocView("pdf")} Icon={FileText}>
+                PDF
+              </SurfaceTab>
+            </div>
+            {docView === "reader" && (
+              <button
+                type="button"
+                onClick={() => setReaderTheme((t) => (t === "dark" ? "light" : "dark"))}
+                title={readerTheme === "dark" ? "Switch to light" : "Switch to dark"}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--ink-500)] hover:bg-[var(--surface-sunken)] hover:text-[var(--ink-900)]"
+              >
+                {readerTheme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+              </button>
+            )}
+          </div>
+
+          <div className="relative min-h-0 flex-1">
+            {docView === "reader" ? (
+              <ReaderView
+                docId={docId}
+                pdfUrl={meta.pdfUrl}
+                theme={readerTheme}
+                onTextSelect={setGhost}
+              />
+            ) : (
+              <PdfViewer
+                pdfUrl={meta.pdfUrl}
+                numPages={meta.numPages}
+                pageDims={meta.pages.map((p) => ({ width: p.width, height: p.height }))}
+                tags={tags}
+                activeTagId={activeTagId}
+                onTagClick={handleTagClick}
+                detecting={detecting}
+                onTextSelect={setGhost}
+              />
+            )}
+          </div>
           {ghost && meta && (
             <GhostReader
               docId={docId}
@@ -556,6 +622,34 @@ export default function ViewerClient({ docId }: { docId: string }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Segmented tab for the left-panel surface toggle (Reader ⇄ PDF). */
+function SurfaceTab({
+  active,
+  onClick,
+  Icon,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  Icon: typeof FileText;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px] font-medium transition ${
+        active
+          ? "bg-white text-[var(--ink-900)] shadow-[0_1px_2px_rgba(17,17,19,0.08)]"
+          : "text-[var(--ink-500)] hover:text-[var(--ink-900)]"
+      }`}
+    >
+      <Icon className="h-3.5 w-3.5" />
+      {children}
+    </button>
   );
 }
 
