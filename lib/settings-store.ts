@@ -47,6 +47,10 @@ export type AppSettings = {
   ollamaBaseUrl: string;
   /** Selected local Ollama model (empty until chosen/installed). */
   ollamaModel: string;
+  /** Extra directories the local-model finder should scan for .gguf weights,
+   *  on top of the well-known stores. Lets a user point us at, say,
+   *  ~/Documents/models. */
+  localModelDirs: string[];
 };
 
 const VERSION = 1 as const;
@@ -63,7 +67,17 @@ function defaultsFromEnv(): AppSettings {
     openrouterModel: OPENROUTER_DEFAULT_MODEL,
     ollamaBaseUrl: OLLAMA_BASE_URL,
     ollamaModel: "",
+    localModelDirs: [],
   };
+}
+
+/** Coerce an arbitrary value to a clean list of directory strings. */
+function strList(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((x): x is string => typeof x === "string")
+    .map((x) => x.trim())
+    .filter(Boolean);
 }
 
 /** Coerce an arbitrary value to a supported Codex model id, else the default. */
@@ -106,6 +120,7 @@ export function loadSettings(): AppSettings {
         ollamaBaseUrl:
           str(parsed.ollamaBaseUrl, env.ollamaBaseUrl).trim() || env.ollamaBaseUrl,
         ollamaModel: str(parsed.ollamaModel, env.ollamaModel).trim(),
+        localModelDirs: strList(parsed.localModelDirs),
       };
     }
   } catch {
@@ -128,6 +143,7 @@ export function saveSettings(s: AppSettings): void {
     openrouterModel: (s.openrouterModel ?? "").trim() || OPENROUTER_DEFAULT_MODEL,
     ollamaBaseUrl: (s.ollamaBaseUrl ?? "").trim() || OLLAMA_BASE_URL,
     ollamaModel: (s.ollamaModel ?? "").trim(),
+    localModelDirs: strList(s.localModelDirs),
   };
   const tmp = `${SETTINGS_PATH}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(file, null, 2));
