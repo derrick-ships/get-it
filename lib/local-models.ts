@@ -141,6 +141,14 @@ function ollamaModelsRoot(home: string): string {
   return path.join(home, ".ollama", "models");
 }
 
+/** Cheap "is Ollama installed?" check — does its model store exist on disk?
+ *  Used by the providers status route so the Settings UI can distinguish
+ *  "installed but stopped" (offer Start) from "not installed" (offer Install)
+ *  without running a full local-model scan. */
+export async function isOllamaInstalled(homeDir?: string): Promise<boolean> {
+  return exists(ollamaModelsRoot(homeDir ?? os.homedir()));
+}
+
 /** Turn a manifests-relative path into the id `ollama run` expects.
  *  e.g. registry.ollama.ai/library/gemma3/4b → "gemma3:4b"
  *       registry.ollama.ai/library/llama3.2/latest → "llama3.2:latest" */

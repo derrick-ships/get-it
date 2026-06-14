@@ -324,31 +324,149 @@ html[data-platform="win32"] .tab-bar {
 }
 
 /* pdf.js text layer — invisible, selectable spans laid over each page canvas
-   so the ghostreader can read what the user highlights. Spans are positioned
-   by pdf.js using the --scale-factor we set on the container. */
+   so the ghostreader can read what the user highlights. These rules mirror
+   pdfjs-dist's own pdf_viewer.css: the container and spans are sized from
+   --total-scale-factor (set per render in PdfViewer), and each span needs the
+   font-size + transform below or it renders at the browser default and drifts
+   off the rendered glyphs — which is what scrambles the selected text. */
 .textLayer {
   position: absolute;
+  text-align: initial;
   inset: 0;
   overflow: clip;
   opacity: 1;
   line-height: 1;
-  text-align: initial;
+  text-size-adjust: none;
   forced-color-adjust: none;
   transform-origin: 0 0;
   caret-color: transparent;
   z-index: 1;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
 }
 .textLayer :is(span, br) {
   color: transparent;
   position: absolute;
   white-space: pre;
   cursor: text;
-  transform-origin: 0 0;
+  transform-origin: 0% 0%;
 }
-.textLayer span.markedContent {
-  top: 0;
-  height: 0;
+.textLayer > :not(.markedContent),
+.textLayer .markedContent span:not(.markedContent) {
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x))
+    scale(var(--min-font-size-inv));
+}
+.textLayer .markedContent {
+  display: contents;
 }
 .textLayer ::selection {
   background: rgba(91, 102, 241, 0.32);
 }
+
+/* ── Reader view ────────────────────────────────────────────────────────────
+   A focused reading surface (the default left panel). Optimized for legibility
+   and scannability, with light + dark themes scoped to this surface only. */
+.reader-surface {
+  --reader-bg: #fbfaf8;
+  --reader-ink: #26262b;
+  --reader-heading: #111113;
+  --reader-muted: #8c8c90;
+  --reader-rule: #e7e6e2;
+  --reader-selection: rgba(91, 102, 241, 0.28);
+  background: var(--reader-bg);
+  color: var(--reader-ink);
+}
+.reader-surface.dark {
+  --reader-bg: #1a1a1d;
+  --reader-ink: #e7e7ea;
+  --reader-heading: #ffffff;
+  --reader-muted: #9a9aa0;
+  --reader-rule: #34343a;
+  --reader-selection: rgba(129, 140, 248, 0.38);
+}
+.reader-prose {
+  font-size: 17px;
+  line-height: 1.72;
+  letter-spacing: 0.002em;
+}
+.reader-prose ::selection {
+  background: var(--reader-selection);
+}
+.reader-para {
+  margin: 0 0 1.05em 0;
+  color: var(--reader-ink);
+  /* Hyphenation + justified-ish wrapping kept off for a calmer ragged edge. */
+  overflow-wrap: break-word;
+}
+.reader-h2 {
+  margin: 1.7em 0 0.5em;
+  font-size: 1.45em;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--reader-heading);
+}
+.reader-h3 {
+  margin: 1.4em 0 0.4em;
+  font-size: 1.18em;
+  font-weight: 650;
+  line-height: 1.3;
+  color: var(--reader-heading);
+}
+/* Markdown rendered by `marked` (md uploads). */
+.reader-md {
+  color: var(--reader-ink);
+}
+.reader-md h1,
+.reader-md h2,
+.reader-md h3,
+.reader-md h4 {
+  color: var(--reader-heading);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  margin: 1.6em 0 0.5em;
+}
+.reader-md h1 { font-size: 1.7em; }
+.reader-md h2 { font-size: 1.42em; }
+.reader-md h3 { font-size: 1.18em; }
+.reader-md p { margin: 0 0 1.05em; }
+.reader-md ul,
+.reader-md ol { margin: 0 0 1.05em; padding-left: 1.4em; }
+.reader-md li { margin: 0.25em 0; }
+.reader-md li > ul,
+.reader-md li > ol { margin: 0.25em 0; }
+.reader-md a { color: var(--accent-600); text-decoration: underline; }
+.reader-surface.dark .reader-md a { color: #a5b4fc; }
+.reader-md code {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.88em;
+  background: color-mix(in srgb, var(--reader-ink) 9%, transparent);
+  padding: 0.12em 0.36em;
+  border-radius: 5px;
+}
+.reader-md pre {
+  background: color-mix(in srgb, var(--reader-ink) 8%, transparent);
+  border: 1px solid var(--reader-rule);
+  border-radius: 10px;
+  padding: 0.9em 1em;
+  overflow-x: auto;
+  margin: 0 0 1.1em;
+}
+.reader-md pre code { background: none; padding: 0; }
+.reader-md blockquote {
+  margin: 0 0 1.1em;
+  padding-left: 1em;
+  border-left: 3px solid var(--reader-rule);
+  color: var(--reader-muted);
+}
+.reader-md img { max-width: 100%; height: auto; border-radius: 8px; }
+.reader-md table { border-collapse: collapse; margin: 0 0 1.1em; font-size: 0.95em; }
+.reader-md th,
+.reader-md td { border: 1px solid var(--reader-rule); padding: 0.4em 0.6em; text-align: left; }
+.reader-md hr { border: none; border-top: 1px solid var(--reader-rule); margin: 1.8em 0; }

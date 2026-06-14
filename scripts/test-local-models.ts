@@ -10,7 +10,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { scanLocalModels } from "../lib/local-models";
+import { scanLocalModels, isOllamaInstalled } from "../lib/local-models";
 
 let failures = 0;
 function check(name: string, cond: boolean) {
@@ -112,6 +112,10 @@ check("usable models sort first", res.models.length === 0 || res.models[0].usabl
 const emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), "getit-empty-"));
 const empty = await scanLocalModels({ homeDir: emptyHome });
 check("empty machine → no models, no crash", empty.models.length === 0 && empty.ollamaInstalled === false);
+
+// ── isOllamaInstalled (powers the Settings install/start/download states) ──
+check("isOllamaInstalled true when ~/.ollama/models exists", (await isOllamaInstalled(home)) === true);
+check("isOllamaInstalled false on a bare home", (await isOllamaInstalled(emptyHome)) === false);
 
 // ── Cleanup ───────────────────────────────────────────────────────────────
 fs.rmSync(home, { recursive: true, force: true });

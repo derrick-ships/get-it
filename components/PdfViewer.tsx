@@ -408,7 +408,12 @@ function PdfPage({
       if (!cancelled && tld) {
         try {
           tld.replaceChildren();
-          tld.style.setProperty("--scale-factor", String(scale));
+          // This pdfjs build sizes the text-layer container and its spans
+          // from --total-scale-factor (NOT --scale-factor). Setting the wrong
+          // variable collapses the layer geometry, so the invisible
+          // selectable spans drift off the rendered glyphs and selection
+          // returns scrambled text. Keep this in sync with the layer viewport.
+          tld.style.setProperty("--total-scale-factor", String(scale));
           const textContent = await page.getTextContent();
           if (!cancelled) {
             const layer = new TextLayer({
