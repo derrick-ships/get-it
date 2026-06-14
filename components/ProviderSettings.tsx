@@ -20,8 +20,9 @@ import {
   Loader2,
   RefreshCw,
 } from "lucide-react";
-import { CODEX_MODELS, OPENROUTER_MODELS } from "@/lib/codex-models";
+import { CODEX_MODELS } from "@/lib/codex-models";
 import { SETTINGS_EVENT } from "@/lib/settings-event";
+import ModelSearchSelect from "@/components/providers/ModelSearchSelect";
 
 type Provider = "codex" | "openrouter" | "ollama";
 
@@ -316,19 +317,10 @@ export default function ProviderSettings({ onProviderReady }: { onProviderReady?
               Save
             </button>
           </div>
-          <LabeledCombo
-            label="Model"
+          <ModelSearchSelect
             value={settings.openrouterModel}
-            options={[...OPENROUTER_MODELS]}
-            placeholder="any model id…"
             onCommit={(v) => persist({ openrouterModel: v })}
           />
-          <p className="text-[10.5px] leading-snug text-[var(--ink-400)]">
-            Type any model id from openrouter.ai/models — e.g.{" "}
-            <code className="text-[var(--ink-600)]">moonshotai/kimi-k2</code>,{" "}
-            <code className="text-[var(--ink-600)]">x-ai/grok-2-1212</code>. Suggestions are
-            just shortcuts.
-          </p>
         </div>
       )}
 
