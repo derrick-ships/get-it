@@ -18,6 +18,7 @@ import {
   ArrowLeft,
   BookOpen,
   FileText,
+  FilePlus,
   Loader2,
   Network,
   Trash2,
@@ -25,6 +26,7 @@ import {
 import AccountButton from "@/components/AccountButton";
 import SettingsButton from "@/components/SettingsButton";
 import EmojiPicker from "@/components/projects/EmojiPicker";
+import AddDocsModal from "@/components/projects/AddDocsModal";
 import KnowledgeGraphView from "@/components/RightPane/KnowledgeGraphView";
 
 type ProjectDoc = { id: string; filename: string; numPages: number; uploadedAt: number };
@@ -39,6 +41,7 @@ export default function ProjectClient({ projectId }: { projectId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [nameDraft, setNameDraft] = useState("");
   const [tab, setTab] = useState<"graph" | "docs">("graph");
+  const [showAdd, setShowAdd] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -131,6 +134,14 @@ export default function ProjectClient({ projectId }: { projectId: string }) {
               <span className="shrink-0 text-[12.5px] text-[var(--ink-500)]">
                 {project.docs.length} doc{project.docs.length === 1 ? "" : "s"}
               </span>
+              <button
+                type="button"
+                onClick={() => setShowAdd(true)}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-[var(--accent-600)] px-2.5 py-1.5 text-[12.5px] font-semibold text-white hover:bg-[var(--accent-700)]"
+              >
+                <FilePlus className="h-3.5 w-3.5" />
+                Add documents
+              </button>
             </div>
             {/* Sub-tabs */}
             <div className="mx-auto mt-3 flex max-w-5xl gap-1">
@@ -146,7 +157,7 @@ export default function ProjectClient({ projectId }: { projectId: string }) {
           {/* Body */}
           <div className="relative min-h-0 flex-1">
             {project.docs.length === 0 ? (
-              <EmptyProject />
+              <EmptyProject onAdd={() => setShowAdd(true)} />
             ) : tab === "graph" ? (
               <KnowledgeGraphView
                 docId={project.id}
@@ -192,6 +203,14 @@ export default function ProjectClient({ projectId }: { projectId: string }) {
           </div>
         </div>
       )}
+
+      {showAdd && project && (
+        <AddDocsModal
+          projectId={project.id}
+          onClose={() => setShowAdd(false)}
+          onChanged={load}
+        />
+      )}
     </main>
   );
 }
@@ -223,23 +242,23 @@ function SubTab({
   );
 }
 
-function EmptyProject() {
+function EmptyProject({ onAdd }: { onAdd: () => void }) {
   return (
     <div className="mx-auto mt-16 max-w-md rounded-2xl border border-dashed border-[var(--accent-100)] bg-[var(--accent-50)]/40 px-6 py-12 text-center">
       <Network className="mx-auto h-10 w-10 text-[var(--ink-300)]" />
       <p className="mt-3 text-[14px] font-medium text-[var(--ink-900)]">No documents yet</p>
       <p className="mt-1 text-[12.5px] text-[var(--ink-500)]">
-        Add documents to this project from your library — use the project menu
-        on any document. Once there are two or more, the cross-document
-        knowledge graph maps how their ideas connect.
+        Add documents straight from your library. Once there are two or more,
+        the cross-document knowledge graph maps how their ideas connect.
       </p>
-      <Link
-        href="/library"
+      <button
+        type="button"
+        onClick={onAdd}
         className="mt-5 inline-flex items-center gap-1.5 rounded-md bg-[var(--accent-600)] px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-[var(--accent-700)]"
       >
-        <BookOpen className="h-3.5 w-3.5" />
-        Go to library
-      </Link>
+        <FilePlus className="h-3.5 w-3.5" />
+        Add documents
+      </button>
     </div>
   );
 }
