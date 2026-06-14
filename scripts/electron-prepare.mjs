@@ -229,14 +229,28 @@ async function fetchPlatformPackage(targetTriple) {
   await fs.rm(destVendor, { recursive: true, force: true });
   await fs.mkdir(destVendor, { recursive: true });
   await copyDir(srcVendor, destVendor);
+  // The binary lives at vendor/<triple>/bin/codex (≥0.139) or codex/codex
+  // (≤0.130). Mark whichever exists executable; the runtime resolver probes
+  // both subdirs.
+  let stagedAt = null;
   if (!targetTriple.startsWith("win32-")) {
-    try {
-      fssync.chmodSync(path.join(destVendor, "codex", exeName), 0o755);
-    } catch {
-      /* ignore */
+    for (const sub of ["bin", "codex"]) {
+      const p = path.join(destVendor, sub, exeName);
+      if (fssync.existsSync(p)) {
+        try {
+          fssync.chmodSync(p, 0o755);
+        } catch {
+          /* ignore */
+        }
+        stagedAt = `${sub}/${exeName}`;
+      }
     }
+  } else {
+    stagedAt = fssync.existsSync(path.join(destVendor, "bin", exeName))
+      ? `bin/${exeName}`
+      : `codex/${exeName}`;
   }
-  console.log(`[electron-prepare] staged codex binary at electron/codex-bin/${triple}/codex/${exeName}`);
+  console.log(`[electron-prepare] staged codex binary at electron/codex-bin/${triple}/${stagedAt}`);
 }
 
 function hostTarget() {

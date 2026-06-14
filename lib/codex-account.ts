@@ -53,6 +53,20 @@ function targetTriple(): string | null {
   return null;
 }
 
+// Codex's platform package changed where the binary lives across versions:
+//   ≤0.130: vendor/<triple>/codex/codex(.exe)
+//   ≥0.139: vendor/<triple>/bin/codex(.exe)
+// Probe both subdirs so a layout bump can't break resolution (must match
+// electron/setup.js, which is the authoritative resolver).
+function findCodexUnderVendorTriple(baseDir: string): string | null {
+  const exe = process.platform === "win32" ? "codex.exe" : "codex";
+  for (const sub of ["bin", "codex"]) {
+    const p = path.join(baseDir, sub, exe);
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
 function resolveCodexBinary(): string | null {
   // Electron main exports this for us; respect it when it's there.
   if (process.env.CODEX_BINARY_PATH && fs.existsSync(process.env.CODEX_BINARY_PATH)) {
@@ -61,7 +75,6 @@ function resolveCodexBinary(): string | null {
   const triple = targetTriple();
   const pkg = triple ? PLATFORM_PACKAGE_BY_TARGET[triple] : null;
   if (!triple || !pkg) return null;
-  const exe = process.platform === "win32" ? "codex.exe" : "codex";
 
   // 1) Walk node_modules like the SDK does
   try {
@@ -70,8 +83,8 @@ function resolveCodexBinary(): string | null {
     const codexRequire = createRequire(codexPkgJson);
     const platformPkgJson = codexRequire.resolve(`${pkg}/package.json`);
     const vendorRoot = path.join(path.dirname(platformPkgJson), "vendor");
-    const binaryPath = path.join(vendorRoot, triple, "codex", exe);
-    if (fs.existsSync(binaryPath)) return binaryPath;
+    const binaryPath = findCodexUnderVendorTriple(path.join(vendorRoot, triple));
+    if (binaryPath) return binaryPath;
   } catch {
     /* try the next strategy */
   }
@@ -79,27 +92,23 @@ function resolveCodexBinary(): string | null {
   // 2) Packaged Electron app: extraResources/codex-bin
   const resourcesPath = (process as unknown as { resourcesPath?: string }).resourcesPath;
   if (resourcesPath) {
-    const staged = path.join(
-      resourcesPath,
-      "app.asar.unpacked",
-      "electron",
-      "codex-bin",
-      triple,
-      "codex",
-      exe,
+    const staged = findCodexUnderVendorTriple(
+      path.join(resourcesPath, "app.asar.unpacked", "electron", "codex-bin", triple),
     );
-    if (fs.existsSync(staged)) return staged;
+    if (staged) return staged;
   }
 
   // 3) Source-tree fallback: scripts/electron-prepare.mjs stages the
-  //    binary at <repo>/electron/codex-bin/<triple>/codex/<exe>. Walk
+  //    binary at <repo>/electron/codex-bin/<triple>/{bin,codex}/<exe>. Walk
   //    upward from cwd looking for it — covers `next dev`, the
   //    standalone server when launched from .next/standalone/, and
   //    plain `node` invocations from the repo root.
   let dir = process.cwd();
   for (let i = 0; i < 6; i++) {
-    const candidate = path.join(dir, "electron", "codex-bin", triple, "codex", exe);
-    if (fs.existsSync(candidate)) return candidate;
+    const candidate = findCodexUnderVendorTriple(
+      path.join(dir, "electron", "codex-bin", triple),
+    );
+    if (candidate) return candidate;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;

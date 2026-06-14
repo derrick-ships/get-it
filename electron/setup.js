@@ -91,18 +91,17 @@ function candidateNodeModulesRoots() {
  * extraResources lands at runtime. We try it first; then fall back to
  * the node_modules layout (useful in dev and as a recovery path).
  */
-function bundledStagedBinaryPaths() {
+function bundledStagedBinaryBases() {
   const triple = targetTriple();
   if (!triple) return [];
-  const exe = process.platform === "win32" ? "codex.exe" : "codex";
   const out = [];
   if (process.resourcesPath) {
     out.push(
-      path.join(process.resourcesPath, "app.asar.unpacked", "electron", "codex-bin", triple, "codex", exe),
-      path.join(process.resourcesPath, "electron", "codex-bin", triple, "codex", exe),
+      path.join(process.resourcesPath, "app.asar.unpacked", "electron", "codex-bin", triple),
+      path.join(process.resourcesPath, "electron", "codex-bin", triple),
     );
   }
-  out.push(path.join(app.getAppPath(), "electron", "codex-bin", triple, "codex", exe));
+  out.push(path.join(app.getAppPath(), "electron", "codex-bin", triple));
   return out;
 }
 
@@ -113,6 +112,23 @@ function maybeChmod(p) {
   } catch {
     /* ignore */
   }
+}
+
+// Codex's platform package changed where the binary lives across versions:
+//   ≤0.130: vendor/<triple>/codex/codex(.exe)   (sibling: path/rg)
+//   ≥0.139: vendor/<triple>/bin/codex(.exe)      (siblings: codex-path/, codex-resources/)
+// We probe both subdirs everywhere a binary is resolved so a future layout
+// bump can't silently break startup again. The whole vendor/<triple> tree
+// (binary + sibling resources) is always copied/extracted together, so the
+// binary finds its resources regardless of which subdir holds the executable.
+const CODEX_BINARY_SUBDIRS = ["bin", "codex"];
+function findCodexUnderVendorTriple(baseDir) {
+  const exe = process.platform === "win32" ? "codex.exe" : "codex";
+  for (const sub of CODEX_BINARY_SUBDIRS) {
+    const p = path.join(baseDir, sub, exe);
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
 }
 
 /**
@@ -140,25 +156,26 @@ function maybeChmod(p) {
 function resolveCodexBinary() {
   const triple = targetTriple();
   if (!triple) return null;
-  const exe = process.platform === "win32" ? "codex.exe" : "codex";
-  for (const candidate of bundledStagedBinaryPaths()) {
-    if (fs.existsSync(candidate)) {
-      maybeChmod(candidate);
-      return { path: candidate, source: "bundled" };
+  for (const base of bundledStagedBinaryBases()) {
+    const found = findCodexUnderVendorTriple(base);
+    if (found) {
+      maybeChmod(found);
+      return { path: found, source: "bundled" };
     }
   }
   const pkg = platformPackage();
   if (pkg) {
     for (const root of candidateNodeModulesRoots()) {
-      const candidate = path.join(root, pkg, "vendor", triple, "codex", exe);
-      if (fs.existsSync(candidate)) {
-        maybeChmod(candidate);
-        return { path: candidate, source: "node_modules" };
+      const found = findCodexUnderVendorTriple(path.join(root, pkg, "vendor", triple));
+      if (found) {
+        maybeChmod(found);
+        return { path: found, source: "node_modules" };
       }
     }
   }
-  const userDataBin = bundledCodexPath();
-  if (userDataBin && fs.existsSync(userDataBin)) {
+  const base = userDataVendorBase();
+  const userDataBin = base ? findCodexUnderVendorTriple(base) : null;
+  if (userDataBin) {
     return { path: userDataBin, source: "userdata" };
   }
   return null;
@@ -217,11 +234,10 @@ function userDataBundleRoot() {
   return root;
 }
 
-function bundledCodexPath() {
+function userDataVendorBase() {
   const triple = targetTriple();
   if (!triple) return null;
-  const exe = process.platform === "win32" ? "codex.exe" : "codex";
-  return path.join(userDataBundleRoot(), "vendor", triple, "codex", exe);
+  return path.join(userDataBundleRoot(), "vendor", triple);
 }
 
 function downloadToBuffer(url) {
@@ -275,16 +291,17 @@ async function fetchCodexBinaryToUserData(version, onProgress) {
   // vendor/<triple>/codex/codex(.exe) and any sibling files. Streaming
   // tar parsers exist but adding a dep just for one tarball isn't worth it.
   await extractTarBuffer(tarBuf, userDataBundleRoot());
-  const out = bundledCodexPath();
+  const base = userDataVendorBase();
+  const out = base ? findCodexUnderVendorTriple(base) : null;
+  if (!out) {
+    throw new Error(`Codex binary not found under ${base} after extraction`);
+  }
   if (process.platform !== "win32") {
     try {
       fs.chmodSync(out, 0o755);
     } catch {
       /* ignore */
     }
-  }
-  if (!fs.existsSync(out)) {
-    throw new Error(`Codex binary not found at ${out} after extraction`);
   }
   return out;
 }
