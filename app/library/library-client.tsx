@@ -3,11 +3,11 @@
 /**
  * Library page.
  *
- * Lists every PDF the user has ever opened in this installation. Each row
- * shows filename, page count, last-activity time, the knowledge-graph
- * status, and how many evaluator passes have run. Clicking a row jumps
- * back into the viewer with all state restored (tags + workctx + KG are
- * already on disk thanks to lib/paths.ts).
+ * Lists every PDF the user has ever opened in this installation, and the
+ * projects they've grouped docs into. Each doc row shows filename, page
+ * count, last-activity time, the knowledge-graph status, evaluator passes,
+ * and which project it belongs to (with a menu to move it). Projects show as
+ * cards at the top that open a cross-document knowledge graph.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -15,9 +15,11 @@ import Link from "next/link";
 import AccountButton from "@/components/AccountButton";
 import SettingsButton from "@/components/SettingsButton";
 import TooltipChip from "@/components/TooltipChip";
+import NewProjectModal from "@/components/projects/NewProjectModal";
 import {
   BookOpen,
   FileText,
+  FolderPlus,
   Loader2,
   Network,
   RefreshCw,
@@ -37,6 +39,15 @@ type LibraryRow = {
   tagsAnalyzedPages: number | null;
   tagsTotal: number | null;
   tagsReady: number | null;
+  projectId?: string | null;
+};
+
+type ProjectRow = {
+  id: string;
+  name: string;
+  emoji: string;
+  docCount: number;
+  kgStatus: "missing" | "building" | "ready" | "error";
 };
 
 const FILENAME_TO_TITLE: Record<string, string> = {
@@ -63,16 +74,25 @@ function humaniseAgo(ts: number): string {
 
 export default function LibraryClient() {
   const [rows, setRows] = useState<LibraryRow[] | null>(null);
+  const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [showNewProject, setShowNewProject] = useState(false);
 
   const reload = useCallback(async () => {
     setError(null);
     try {
-      const r = await fetch("/api/library", { cache: "no-store" });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const j = (await r.json()) as { docs: LibraryRow[] };
-      setRows(j.docs);
+      const [lr, pr] = await Promise.all([
+        fetch("/api/library", { cache: "no-store" }),
+        fetch("/api/projects", { cache: "no-store" }),
+      ]);
+      if (!lr.ok) throw new Error(`HTTP ${lr.status}`);
+      const lj = (await lr.json()) as { docs: LibraryRow[] };
+      setRows(lj.docs);
+      if (pr.ok) {
+        const pj = (await pr.json()) as { projects: ProjectRow[] };
+        setProjects(pj.projects);
+      }
     } catch (e) {
       setError((e as Error).message);
       setRows([]);
@@ -83,24 +103,13 @@ export default function LibraryClient() {
     reload();
   }, [reload]);
 
-  // Auto-poll while at least one doc has background work in progress:
-  // tag detection still running (analyzedPages < numPages), or the KG
-  // still building, or some tags still generating. Same source as the
-  // viewer's TagsChip — keeps the badges live across multiple PDFs at
-  // once. Slows to idle cadence when everything is settled.
+  // Auto-poll while at least one doc has background work in progress.
   const anyDocWorking = useMemo(() => {
     if (!rows) return false;
     return rows.some((d) => {
       if (d.kgStatus === "building") return true;
-      if (
-        d.tagsAnalyzedPages != null &&
-        d.tagsAnalyzedPages < d.numPages
-      ) return true;
-      if (
-        d.tagsTotal != null &&
-        d.tagsReady != null &&
-        d.tagsReady < d.tagsTotal
-      ) return true;
+      if (d.tagsAnalyzedPages != null && d.tagsAnalyzedPages < d.numPages) return true;
+      if (d.tagsTotal != null && d.tagsReady != null && d.tagsReady < d.tagsTotal) return true;
       return false;
     });
   }, [rows]);
@@ -118,9 +127,7 @@ export default function LibraryClient() {
       }
       setDeleting(id);
       try {
-        const r = await fetch(`/api/library?id=${encodeURIComponent(id)}`, {
-          method: "DELETE",
-        });
+        const r = await fetch(`/api/library?id=${encodeURIComponent(id)}`, { method: "DELETE" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         await reload();
       } catch (e) {
@@ -132,7 +139,30 @@ export default function LibraryClient() {
     [reload],
   );
 
-  const empty = rows != null && rows.length === 0;
+  // Move a doc between projects. Unfile from the old (so its graph invalidates)
+  // then file into the new — keeps both project graphs honest.
+  const moveDoc = useCallback(
+    async (docId: string, from: string | null | undefined, to: string) => {
+      if (from && from !== to) {
+        await fetch(`/api/projects/${from}/docs`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ docId, action: "remove" }),
+        });
+      }
+      if (to) {
+        await fetch(`/api/projects/${to}/docs`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ docId, action: "add" }),
+        });
+      }
+      await reload();
+    },
+    [reload],
+  );
+
+  const empty = rows != null && rows.length === 0 && projects.length === 0;
 
   return (
     <main className="flex flex-1 min-h-0 flex-col bg-[var(--surface-canvas)] text-[var(--ink-900)]">
@@ -150,12 +180,7 @@ export default function LibraryClient() {
         </div>
         <div className="ml-auto flex items-center gap-1 pr-1">
           <TooltipChip tip="Refresh the library list.">
-            <button
-              type="button"
-              onClick={reload}
-              aria-label="Refresh library"
-              className="tab-icon-btn"
-            >
+            <button type="button" onClick={reload} aria-label="Refresh library" className="tab-icon-btn">
               <RefreshCw className="h-3.5 w-3.5" />
             </button>
           </TooltipChip>
@@ -173,7 +198,8 @@ export default function LibraryClient() {
           <p className="mt-3 max-w-2xl text-[14px] leading-[1.65] text-[var(--ink-700)]">
             Every PDF you&apos;ve opened lives here. Click any row to jump back
             in — your tags, chats, flashcards, quizzes, Feynman sessions and
-            knowledge graph are all still there.
+            knowledge graph are all still there. Group related docs into a
+            project to get a knowledge graph that spans them.
           </p>
 
           {error && (
@@ -187,6 +213,56 @@ export default function LibraryClient() {
               <Loader2 className="h-4 w-4 animate-spin text-[var(--accent-600)]" />
               loading…
             </div>
+          )}
+
+          {/* Projects */}
+          {rows != null && (
+            <section className="mt-9">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-[13px] font-semibold uppercase tracking-wider text-[var(--ink-500)]">
+                  Projects
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setShowNewProject(true)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border-subtle)] bg-white px-2.5 py-1.5 text-[12px] font-medium text-[var(--ink-700)] hover:border-[var(--border-strong)]"
+                >
+                  <FolderPlus className="h-3.5 w-3.5" />
+                  New project
+                </button>
+              </div>
+              {projects.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-[var(--border-default)] bg-[var(--surface-sunken)]/30 px-4 py-5 text-center text-[12.5px] text-[var(--ink-500)]">
+                  No projects yet. Create one, then file documents into it to map
+                  how their concepts connect across files.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {projects.map((p) => (
+                    <Link
+                      key={p.id}
+                      href={`/project/${p.id}`}
+                      className="group flex items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-white p-3 transition hover:border-[var(--border-strong)]"
+                    >
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-sunken)] text-[20px]">
+                        {p.emoji}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[14px] font-semibold text-[var(--ink-900)]">
+                          {p.name}
+                        </p>
+                        <p className="mt-0.5 text-[11.5px] text-[var(--ink-500)]">
+                          {p.docCount} doc{p.docCount === 1 ? "" : "s"}
+                          {p.kgStatus === "ready" ? " · graph ready" : ""}
+                          {p.kgStatus === "building" ? " · graph building" : ""}
+                        </p>
+                      </div>
+                      <Network className="h-4 w-4 shrink-0 text-[var(--ink-300)] group-hover:text-[var(--accent-600)]" />
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </section>
           )}
 
           {empty && (
@@ -209,46 +285,62 @@ export default function LibraryClient() {
           )}
 
           {rows && rows.length > 0 && (
-            <ul className="mt-8 space-y-2">
-              {rows.map((d) => (
-                <LibraryRowItem
-                  key={d.id}
-                  row={d}
-                  deleting={deleting === d.id}
-                  onDelete={() => handleDelete(d.id)}
-                />
-              ))}
-            </ul>
+            <section className="mt-9">
+              <h2 className="mb-3 text-[13px] font-semibold uppercase tracking-wider text-[var(--ink-500)]">
+                All documents
+              </h2>
+              <ul className="space-y-2">
+                {rows.map((d) => (
+                  <LibraryRowItem
+                    key={d.id}
+                    row={d}
+                    projects={projects}
+                    deleting={deleting === d.id}
+                    onDelete={() => handleDelete(d.id)}
+                    onMove={(to) => moveDoc(d.id, d.projectId, to)}
+                  />
+                ))}
+              </ul>
+            </section>
           )}
         </div>
       </div>
+
+      {showNewProject && (
+        <NewProjectModal
+          onClose={() => setShowNewProject(false)}
+          onCreated={() => {
+            setShowNewProject(false);
+            reload();
+          }}
+        />
+      )}
     </main>
   );
 }
 
 function LibraryRowItem({
   row,
+  projects,
   deleting,
   onDelete,
+  onMove,
 }: {
   row: LibraryRow;
+  projects: ProjectRow[];
   deleting: boolean;
   onDelete: () => void;
+  onMove: (toProjectId: string) => void;
 }) {
   const title = useMemo(() => titleOf(row.filename), [row.filename]);
   return (
     <li className="group relative flex items-center gap-4 rounded-xl border border-[var(--border-subtle)] bg-white p-4 transition hover:border-[var(--border-strong)]">
-      <Link
-        href={`/viewer/${row.id}`}
-        className="flex flex-1 items-center gap-4"
-      >
+      <Link href={`/viewer/${row.id}`} className="flex flex-1 items-center gap-4">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-sunken)] text-[var(--ink-500)]">
           <FileText className="h-5 w-5" aria-hidden />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[14px] font-semibold text-[var(--ink-900)]">
-            {title}
-          </p>
+          <p className="truncate text-[14px] font-semibold text-[var(--ink-900)]">{title}</p>
           <p className="mt-0.5 truncate text-[11.5px] text-[var(--ink-500)]">
             {row.filename} · {row.numPages} page{row.numPages === 1 ? "" : "s"} · last opened {humaniseAgo(row.lastActivityAt)}
           </p>
@@ -263,6 +355,21 @@ function LibraryRowItem({
           <KGBadge status={row.kgStatus} evals={row.kgEvaluationCount} />
         </div>
       </Link>
+      {/* Move-to-project menu. Stops propagation so picking doesn't navigate. */}
+      <select
+        value={row.projectId ?? ""}
+        onChange={(e) => onMove(e.target.value)}
+        onClick={(e) => e.stopPropagation()}
+        title="File this document into a project"
+        className="hidden h-7 max-w-[140px] shrink-0 rounded-md border border-[var(--border-subtle)] bg-white px-1.5 text-[11px] text-[var(--ink-600)] hover:border-[var(--border-strong)] focus:border-[var(--accent-500)] focus:outline-none sm:block"
+      >
+        <option value="">No project</option>
+        {projects.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.emoji} {p.name}
+          </option>
+        ))}
+      </select>
       <button
         type="button"
         onClick={(e) => {
@@ -274,11 +381,7 @@ function LibraryRowItem({
         title="Remove from library"
         className="ml-1 shrink-0 rounded-md p-1.5 text-[var(--ink-400)] opacity-0 transition hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100 disabled:opacity-50"
       >
-        {deleting ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <Trash2 className="h-3.5 w-3.5" />
-        )}
+        {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
       </button>
     </li>
   );
@@ -286,15 +389,6 @@ function LibraryRowItem({
 
 /**
  * Two-phase tag-progress pill, mirroring the viewer's top-bar TagsChip.
- *
- *   • Doc never opened in the viewer (tagsTotal == null) → "no tags yet"
- *     in neutral grey.
- *   • Detection still running (analyzedPages < numPages) → "N/total
- *     pages" in neutral grey with a spinner.
- *   • Detection done → "N/total viz" in emerald when every tag has
- *     a ready visualization, otherwise neutral grey.
- *
- * Same compact pill style as KGBadge so the two read as a pair.
  */
 function TagsBadge({
   analyzedPages,
@@ -346,13 +440,7 @@ function TagsBadge({
   );
 }
 
-function KGBadge({
-  status,
-  evals,
-}: {
-  status: LibraryRow["kgStatus"];
-  evals: number;
-}) {
+function KGBadge({ status, evals }: { status: LibraryRow["kgStatus"]; evals: number }) {
   if (status === "missing") {
     return (
       <span
@@ -386,7 +474,6 @@ function KGBadge({
       </span>
     );
   }
-  // ready
   return (
     <span
       title={`${evals} evaluation${evals === 1 ? "" : "s"} so far`}

@@ -25,20 +25,36 @@ type Props = {
   docId: string;
   /**
    * Called when the user clicks a node-action shortcut (e.g. "chat about this
-   * concept"). Lets the right pane switch mode and jump straight in.
+   * concept"). Lets the right pane switch mode and jump straight in. Omitted
+   * for the project-level graph, where there's no single doc to jump into —
+   * the per-concept tool footer is then hidden.
    */
   onJumpToTool?: (tool: "chat" | "flashcards" | "quizzes" | "feynman", topic: string) => void;
+  /**
+   * Override the state/build endpoints so the same renderer can drive a
+   * project-level graph (/api/projects/[id]/kg/...). Defaults to the doc graph.
+   */
+  endpoints?: { state: string; build: string };
 };
 
-export default function KnowledgeGraphView({ docId, onJumpToTool }: Props) {
+export default function KnowledgeGraphView({ docId, onJumpToTool, endpoints }: Props) {
   const [kg, setKg] = useState<KnowledgeGraph | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [building, setBuilding] = useState(false);
 
+  const ep = useMemo(
+    () =>
+      endpoints ?? {
+        state: `/api/kg/${docId}/state`,
+        build: `/api/kg/${docId}/build`,
+      },
+    [endpoints, docId],
+  );
+
   const fetchState = useCallback(async () => {
     try {
-      const r = await fetch(`/api/kg/${docId}/state`, { cache: "no-store" });
+      const r = await fetch(ep.state, { cache: "no-store" });
       if (!r.ok) throw new Error(`state ${r.status}`);
       const j = (await r.json()) as KnowledgeGraph;
       setKg(j);
@@ -46,7 +62,7 @@ export default function KnowledgeGraphView({ docId, onJumpToTool }: Props) {
     } catch (e) {
       setLoadError((e as Error).message);
     }
-  }, [docId]);
+  }, [ep]);
 
   // Initial load + ensure-build on mount.
   useEffect(() => {
@@ -54,12 +70,12 @@ export default function KnowledgeGraphView({ docId, onJumpToTool }: Props) {
     (async () => {
       await fetchState();
       if (cancelled) return;
-      const r = await fetch(`/api/kg/${docId}/state`).then((x) => x.json());
+      const r = await fetch(ep.state).then((x) => x.json());
       if (cancelled) return;
       if (r.status === "missing") {
         setBuilding(true);
         try {
-          await fetch(`/api/kg/${docId}/build`, { method: "POST" });
+          await fetch(ep.build, { method: "POST" });
           await fetchState();
         } catch (e) {
           setLoadError((e as Error).message);
@@ -71,7 +87,7 @@ export default function KnowledgeGraphView({ docId, onJumpToTool }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [docId, fetchState]);
+  }, [ep, fetchState]);
 
   useEffect(() => {
     if (!kg) return;
@@ -121,7 +137,7 @@ export default function KnowledgeGraphView({ docId, onJumpToTool }: Props) {
           onClick={async () => {
             setBuilding(true);
             try {
-              await fetch(`/api/kg/${docId}/build`, { method: "POST" });
+              await fetch(ep.build, { method: "POST" });
               await fetchState();
             } finally {
               setBuilding(false);
@@ -1273,6 +1289,7 @@ function NodeOverlay({
           </p>
         </div>
 
+        {onJumpToTool && (
         <footer className="grid grid-cols-4 gap-1.5 border-t border-[var(--border-subtle)] bg-[var(--surface-canvas)] p-2.5">
           <button
             type="button"
@@ -1303,6 +1320,7 @@ function NodeOverlay({
             Feynman
           </button>
         </footer>
+        )}
       </motion.div>
     </motion.div>
   );
