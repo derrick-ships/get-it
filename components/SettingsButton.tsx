@@ -3,11 +3,12 @@
 /**
  * Top-bar Settings button + popover.
  *
- * Two runtime knobs (auto-generate, viz repair budget), persisted to
- * `/api/settings`. Stateless from the parent's POV — every popover open
- * does a fresh fetch, every change POSTs back, and a `getit:settings`
- * CustomEvent is dispatched so other components on the page (the viewer
- * orchestrator in particular) can react mid-session without polling.
+ * Knobs: AI provider (ChatGPT / OpenRouter / Ollama) + per-provider model and
+ * credentials, auto-generate, viz repair budget. All persisted to
+ * `/api/settings`. Stateless from the parent's POV — every popover open does a
+ * fresh fetch, every change POSTs back, and a `getit:settings` CustomEvent is
+ * dispatched so other components on the page (the viewer orchestrator) can
+ * react mid-session without polling.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -15,15 +16,16 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Settings2 } from "lucide-react";
 import { AUTO_GENERATE_VIZ, MAX_VIZ_GEN_RETRIES } from "@/lib/config";
 import { APP_VERSION } from "@/lib/version";
-import { CODEX_MODEL, CODEX_MODELS } from "@/lib/codex-models";
+import { SETTINGS_EVENT } from "@/lib/settings-event";
+import ProviderSettings from "./ProviderSettings";
+
+// Re-exported so existing importers (the viewer) keep working unchanged.
+export { SETTINGS_EVENT };
 
 export type SettingsPayload = {
   autoGenerate: boolean;
   maxRetries: number;
-  model: string;
 };
-
-export const SETTINGS_EVENT = "getit:settings";
 
 export default function SettingsButton() {
   const [open, setOpen] = useState(false);
@@ -58,7 +60,7 @@ export default function SettingsButton() {
         </button>
         {!open && (
           <span className="viz-tooltip" role="tooltip">
-            Settings — visualization preferences for this app.
+            Settings — AI provider &amp; visualization preferences.
           </span>
         )}
       </span>
@@ -70,7 +72,7 @@ export default function SettingsButton() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.12 }}
-            className="absolute right-0 top-full z-30 mt-1.5 w-[22rem] overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-white shadow-[0_8px_24px_rgba(17,17,19,0.08)]"
+            className="absolute right-0 top-full z-30 mt-1.5 max-h-[80vh] w-[22rem] overflow-y-auto overflow-x-hidden rounded-lg border border-[var(--border-subtle)] bg-white shadow-[0_8px_24px_rgba(17,17,19,0.08)]"
           >
             <SettingsPanel refreshKey={open ? "open" : "closed"} />
           </motion.div>
@@ -83,11 +85,9 @@ export default function SettingsButton() {
 function SettingsPanel({ refreshKey }: { refreshKey: string }) {
   const [autoGenerate, setAutoGenerate] = useState<boolean>(AUTO_GENERATE_VIZ);
   const [maxRetries, setMaxRetries] = useState<number>(MAX_VIZ_GEN_RETRIES);
-  const [model, setModel] = useState<string>(CODEX_MODEL);
   const hydratedRef = useRef(false);
 
-  // Fetch fresh on every popover open so external changes (CLI edits,
-  // a previous run-through-the-wizard, etc.) show up.
+  // Fetch fresh on every popover open so external changes show up.
   useEffect(() => {
     if (refreshKey !== "open") return;
     hydratedRef.current = false;
@@ -98,7 +98,6 @@ function SettingsPanel({ refreshKey }: { refreshKey: string }) {
         if (cancelled) return;
         if (typeof s.autoGenerate === "boolean") setAutoGenerate(s.autoGenerate);
         if (typeof s.maxRetries === "number") setMaxRetries(s.maxRetries);
-        if (typeof s.model === "string") setModel(s.model);
         hydratedRef.current = true;
       })
       .catch(() => {
@@ -119,11 +118,8 @@ function SettingsPanel({ refreshKey }: { refreshKey: string }) {
     })
       .then((r) => r.json())
       .then((next: SettingsPayload) => {
-        // Broadcast so siblings on this page (the viewer) can react.
         try {
-          window.dispatchEvent(
-            new CustomEvent(SETTINGS_EVENT, { detail: next }),
-          );
+          window.dispatchEvent(new CustomEvent(SETTINGS_EVENT, { detail: next }));
         } catch {
           /* ignore */
         }
@@ -148,14 +144,6 @@ function SettingsPanel({ refreshKey }: { refreshKey: string }) {
     [persist],
   );
 
-  const onModel = useCallback(
-    (v: string) => {
-      setModel(v);
-      persist({ model: v });
-    },
-    [persist],
-  );
-
   return (
     <>
       <div className="border-b border-[var(--border-subtle)] px-3 py-2">
@@ -175,32 +163,13 @@ function SettingsPanel({ refreshKey }: { refreshKey: string }) {
         </p>
       </div>
 
-      {/* Model picker */}
-      <div className="flex items-start gap-2.5 px-3 py-2.5">
-        <div className="min-w-0 flex-1">
-          <p className="text-[12.5px] font-medium text-[var(--ink-900)]">
-            AI model
-          </p>
-          <p className="text-[11px] leading-relaxed text-[var(--ink-500)]">
-            The model every agent runs on, billed to your ChatGPT plan. Switch
-            if one isn&rsquo;t available on your account.
-          </p>
-        </div>
-        <select
-          value={model}
-          onChange={(e) => onModel(e.target.value)}
-          className="h-7 shrink-0 rounded-md border border-[var(--border-subtle)] bg-white px-2 text-[12.5px] font-medium text-[var(--ink-900)] focus:border-[var(--accent-500)] focus:outline-none"
-        >
-          {CODEX_MODELS.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
+      {/* Provider + model */}
+      <div className="border-b border-[var(--border-subtle)]">
+        <ProviderSettings />
       </div>
 
       {/* Auto-generate toggle */}
-      <div className="flex items-start gap-2.5 border-t border-[var(--border-subtle)] px-3 py-2.5">
+      <div className="flex items-start gap-2.5 px-3 py-2.5">
         <button
           type="button"
           role="switch"

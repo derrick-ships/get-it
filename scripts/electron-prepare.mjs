@@ -39,7 +39,7 @@ const STANDALONE = path.join(REPO_ROOT, ".next", "standalone");
 const args = process.argv.slice(2);
 const target = args.find((a) => a.startsWith("--target="))?.split("=")[1] ?? null;
 
-const REQUIRED_CODEX_VERSION = process.env.CODEX_VERSION || "0.130.0";
+const REQUIRED_CODEX_VERSION = process.env.CODEX_VERSION || "0.139.0";
 
 const PLATFORM_PKG_BY_TARGET = {
   "darwin-arm64": "@openai/codex-darwin-arm64",

@@ -22,3 +22,74 @@ export const CODEX_MODELS = [
   "gpt-5",
   "gpt-5-codex",
 ] as const;
+
+// ── Providers ───────────────────────────────────────────────────────────
+
+/** The three model backends the app can run agents against. */
+export type Provider = "codex" | "openrouter" | "ollama";
+
+export const PROVIDERS: readonly Provider[] = ["codex", "openrouter", "ollama"];
+
+export function isProvider(v: unknown): v is Provider {
+  return typeof v === "string" && (PROVIDERS as readonly string[]).includes(v);
+}
+
+/** Default OpenRouter base URL (OpenAI-compatible). */
+export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+/** Default local Ollama base URL. */
+export const OLLAMA_BASE_URL = "http://localhost:11434";
+
+/**
+ * Curated OpenRouter models that follow JSON-schema instructions well, the
+ * first being a sensible default. The user can also type any model id.
+ */
+export const OPENROUTER_MODELS = [
+  "openai/gpt-4o-mini",
+  "openai/gpt-4o",
+  "anthropic/claude-3.5-sonnet",
+  "google/gemini-2.0-flash-001",
+  "meta-llama/llama-3.3-70b-instruct",
+  "qwen/qwen-2.5-72b-instruct",
+] as const;
+
+export const OPENROUTER_DEFAULT_MODEL = OPENROUTER_MODELS[0];
+
+/**
+ * Recommend a local Ollama model by total RAM (GB). We favour the qwen2.5
+ * family for its strong JSON / instruction adherence — the agents demand
+ * strict structured output and smaller/older models fail it. The 3B tier is
+ * a last resort (weaker on the knowledge-graph schema); we still suggest it
+ * so low-RAM machines get *something* runnable.
+ */
+export function recommendOllamaModel(ramGB: number): {
+  model: string;
+  approxSizeGB: number;
+  note: string;
+} {
+  if (ramGB < 8) {
+    return {
+      model: "qwen2.5:3b",
+      approxSizeGB: 2,
+      note: "Smallest viable model — fine for chat/flashcards/quizzes; the knowledge graph may be weaker.",
+    };
+  }
+  if (ramGB < 16) {
+    return {
+      model: "qwen2.5:7b",
+      approxSizeGB: 4.7,
+      note: "Good all-round local model for an 8–16 GB machine.",
+    };
+  }
+  if (ramGB < 32) {
+    return {
+      model: "qwen2.5:14b",
+      approxSizeGB: 9,
+      note: "Strong local model for 16–32 GB of RAM.",
+    };
+  }
+  return {
+    model: "qwen2.5:32b",
+    approxSizeGB: 20,
+    note: "High-quality local model for 32 GB+ machines.",
+  };
+}

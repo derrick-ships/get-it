@@ -11,6 +11,7 @@ import {
   loadSettings,
   saveSettings,
   normalizeModel,
+  normalizeProvider,
   type AppSettings,
 } from "@/lib/settings-store";
 
@@ -36,7 +37,28 @@ export async function POST(req: Request) {
       typeof b.maxRetries === "number" && b.maxRetries >= 0
         ? b.maxRetries
         : current.maxRetries,
+    provider: b.provider !== undefined ? normalizeProvider(b.provider) : current.provider,
     model: b.model !== undefined ? normalizeModel(b.model) : current.model,
+    codexModel:
+      b.codexModel !== undefined
+        ? normalizeModel(b.codexModel)
+        : b.model !== undefined
+          ? normalizeModel(b.model)
+          : current.codexModel,
+    openrouterApiKey:
+      typeof b.openrouterApiKey === "string"
+        ? b.openrouterApiKey.trim()
+        : current.openrouterApiKey,
+    openrouterModel:
+      typeof b.openrouterModel === "string" && b.openrouterModel.trim()
+        ? b.openrouterModel.trim()
+        : current.openrouterModel,
+    ollamaBaseUrl:
+      typeof b.ollamaBaseUrl === "string" && b.ollamaBaseUrl.trim()
+        ? b.ollamaBaseUrl.trim()
+        : current.ollamaBaseUrl,
+    ollamaModel:
+      typeof b.ollamaModel === "string" ? b.ollamaModel.trim() : current.ollamaModel,
   };
   saveSettings(next);
   return NextResponse.json(next);
