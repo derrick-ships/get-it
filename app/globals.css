@@ -437,7 +437,9 @@ html[data-platform="win32"] .tab-bar {
 .reader-md h3 { font-size: 1.18em; }
 .reader-md p { margin: 0 0 1.05em; }
 .reader-md ul,
-.reader-md ol { margin: 0 0 1.05em; padding-left: 1.4em; }
+.reader-md ol { margin: 0 0 1.05em; padding-left: 1.5em; }
+.reader-md ul { list-style: disc; }
+.reader-md ol { list-style: decimal; }
 .reader-md li { margin: 0.25em 0; }
 .reader-md li > ul,
 .reader-md li > ol { margin: 0.25em 0; }
