@@ -103,6 +103,16 @@ The draw callback runs every frame. Build an INFORMATIVE animation:
   - chemical reaction: reactant molecules colliding and forming products
   - water cycle, etc.
 
+MOTION QUALITY (this matters — bad animation is worse than none):
+  - Calm and smooth. Move at a readable pace; ease in/out, never teleport or
+    strobe. Nothing should jitter, vibrate, or flicker frame to frame.
+  - Stable composition: keep a consistent layout, margins, and scale across
+    frames — elements must not jump around or overlap their labels. Lay things
+    out once and animate only what genuinely moves.
+  - Loop seamlessly (period ~4–8s) so it reads as a clean, repeating demo.
+  - Fewer, well-placed elements beat a busy scene. Every moving thing should
+    teach the concept; cut anything that's just decoration.
+
 Always paint a clean light background ('#fafafa') as the FIRST step of draw
 so previous frames are erased. Use legible ink colors against that
 background — pick from this palette:
