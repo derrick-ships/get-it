@@ -110,6 +110,11 @@ export function summaryPath(docId: string): string {
   return path.join(docDir(docId), "summary.json");
 }
 
+/** Saved reader highlights (persisted passages the user marked). */
+export function highlightsPath(docId: string): string {
+  return path.join(docDir(docId), "highlights.json");
+}
+
 export function ensureDocDir(docId: string): void {
   fs.mkdirSync(docDir(docId), { recursive: true });
 }

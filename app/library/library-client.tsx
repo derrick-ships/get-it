@@ -20,6 +20,7 @@ import {
   BookOpen,
   FileText,
   FolderPlus,
+  Highlighter,
   Loader2,
   Network,
   RefreshCw,
@@ -178,6 +179,12 @@ export default function LibraryClient() {
           <BookOpen className="h-3.5 w-3.5 text-[var(--accent-600)]" />
           <span>Library</span>
         </div>
+        <TooltipChip tip="Everything you've highlighted.">
+          <Link href="/highlights" aria-label="Highlights" className="tab-item">
+            <Highlighter className="h-3.5 w-3.5 text-[var(--ink-400)]" />
+            <span>Highlights</span>
+          </Link>
+        </TooltipChip>
         <div className="ml-auto flex items-center gap-1 pr-1">
           <TooltipChip tip="Refresh the library list.">
             <button type="button" onClick={reload} aria-label="Refresh library" className="tab-icon-btn">

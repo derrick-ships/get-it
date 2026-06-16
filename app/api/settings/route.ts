@@ -37,6 +37,10 @@ export async function POST(req: Request) {
       typeof b.maxRetries === "number" && b.maxRetries >= 0
         ? b.maxRetries
         : current.maxRetries,
+    vizBudget:
+      typeof b.vizBudget === "number" && b.vizBudget >= 0
+        ? Math.min(200, Math.floor(b.vizBudget))
+        : current.vizBudget,
     provider: b.provider !== undefined ? normalizeProvider(b.provider) : current.provider,
     model: b.model !== undefined ? normalizeModel(b.model) : current.model,
     codexModel:

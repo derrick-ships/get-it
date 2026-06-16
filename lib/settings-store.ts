@@ -33,6 +33,10 @@ import {
 export type AppSettings = {
   autoGenerate: boolean;
   maxRetries: number;
+  /** How many concepts to auto-visualize per document (the pre-flight budget).
+   *  Caps the expensive viz generation so a long doc can't silently burn the
+   *  whole usage window. The Reader's pre-flight gate writes this. */
+  vizBudget: number;
   /** Active model backend. */
   provider: Provider;
   /** Legacy alias for codexModel, kept in sync for back-compat readers. */
@@ -60,6 +64,7 @@ function defaultsFromEnv(): AppSettings {
   return {
     autoGenerate: AUTO_GENERATE_VIZ,
     maxRetries: MAX_VIZ_GEN_RETRIES,
+    vizBudget: 12,
     provider: "codex",
     model: CODEX_MODEL,
     codexModel: CODEX_MODEL,
@@ -111,6 +116,10 @@ export function loadSettings(): AppSettings {
           typeof parsed.maxRetries === "number" && parsed.maxRetries >= 0
             ? Math.min(10, Math.floor(parsed.maxRetries))
             : env.maxRetries,
+        vizBudget:
+          typeof parsed.vizBudget === "number" && parsed.vizBudget >= 0
+            ? Math.min(200, Math.floor(parsed.vizBudget))
+            : env.vizBudget,
         provider: normalizeProvider(parsed.provider),
         model: codexModel,
         codexModel,

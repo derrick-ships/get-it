@@ -8,7 +8,10 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Sparkles, X, Wand2, BookOpen } from "lucide-react";
+import { Loader2, Sparkles, X, Wand2, BookOpen, Highlighter, Check } from "lucide-react";
+
+/** Fired after a highlight is saved so the Reader can re-mark it immediately. */
+export const HIGHLIGHT_EVENT = "getit:highlight-added";
 
 export type GhostSelection = { text: string; rect: DOMRect; pageIndex: number };
 
@@ -31,7 +34,26 @@ export default function GhostReader({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
+  const [highlighted, setHighlighted] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
+
+  const saveHighlight = async () => {
+    try {
+      await fetch(`/api/highlights/${docId}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: selection.text, pageIndex: selection.pageIndex }),
+      });
+      setHighlighted(true);
+      try {
+        window.dispatchEvent(new CustomEvent(HIGHLIGHT_EVENT, { detail: { docId } }));
+      } catch {
+        /* ignore */
+      }
+    } catch {
+      /* non-fatal */
+    }
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -93,14 +115,30 @@ export default function GhostReader({
         <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[var(--ink-800)]">
           <Sparkles className="h-3.5 w-3.5 text-[var(--accent-600)]" /> Ghostreader
         </span>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="rounded p-0.5 text-[var(--ink-400)] transition hover:text-[var(--ink-700)]"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={saveHighlight}
+            disabled={highlighted}
+            title={highlighted ? "Highlighted" : "Save as highlight"}
+            className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium transition ${
+              highlighted
+                ? "text-emerald-600"
+                : "text-[var(--ink-500)] hover:bg-[var(--surface-sunken)] hover:text-[var(--accent-700)]"
+            }`}
+          >
+            {highlighted ? <Check className="h-3.5 w-3.5" /> : <Highlighter className="h-3.5 w-3.5" />}
+            {highlighted ? "Saved" : "Highlight"}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded p-0.5 text-[var(--ink-400)] transition hover:text-[var(--ink-700)]"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
       <div className="px-3 py-2.5">
