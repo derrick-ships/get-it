@@ -28,20 +28,30 @@ export async function GET(
 
   const kind = doc.sourceType ?? "pdf";
 
+  // Shared metadata block powering the Reader's article hero (title line,
+  // source label, reading-time/date).
+  const meta = {
+    filename: doc.filename,
+    sourceType: kind,
+    uploadedAt: doc.uploadedAt,
+    numPages: doc.extracted.numPages,
+  };
+
   if (kind === "md" || kind === "txt") {
     try {
       const content = fs.readFileSync(originalPath(docId, kind), "utf-8");
-      return NextResponse.json({ kind, content });
+      return NextResponse.json({ kind, content, meta });
     } catch {
       // Original missing (older doc) — fall back to the extracted text so the
       // reader still has something clean to show.
       const content = doc.extracted.pages.map((p) => p.text).join("\n\n");
-      return NextResponse.json({ kind, content });
+      return NextResponse.json({ kind, content, meta });
     }
   }
 
   return NextResponse.json({
     kind: "pdf",
+    meta,
     pages: doc.extracted.pages.map((p) => ({
       pageIndex: p.pageIndex,
       width: p.width,

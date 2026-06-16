@@ -369,33 +369,212 @@ html[data-platform="win32"] .tab-bar {
 }
 
 /* ── Reader view ────────────────────────────────────────────────────────────
-   A focused reading surface (the default left panel). Optimized for legibility
-   and scannability, with light + dark themes scoped to this surface only. */
-.reader-surface {
+   A focused reading surface (the default left panel), Readwise-style. Theme
+   vars live on .reader-root so the toolbar + scroll surface theme together;
+   typography is driven by CSS vars the appearance panel writes. */
+.reader-root {
   --reader-bg: #fbfaf8;
   --reader-ink: #26262b;
   --reader-heading: #111113;
   --reader-muted: #8c8c90;
   --reader-rule: #e7e6e2;
+  --reader-accent: #4f5ae0;
   --reader-selection: rgba(91, 102, 241, 0.28);
+  /* Typography knobs (overridden inline by reader prefs). */
+  --reader-font-size: 18px;
+  --reader-line-height: 1.7;
+  --reader-measure: 68ch;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   background: var(--reader-bg);
   color: var(--reader-ink);
 }
-.reader-surface.dark {
+.reader-root.dark {
   --reader-bg: #1a1a1d;
   --reader-ink: #e7e7ea;
   --reader-heading: #ffffff;
   --reader-muted: #9a9aa0;
   --reader-rule: #34343a;
+  --reader-accent: #818cf8;
   --reader-selection: rgba(129, 140, 248, 0.38);
 }
+.reader-surface {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--reader-bg);
+  color: var(--reader-ink);
+}
 .reader-prose {
-  font-size: 17px;
-  line-height: 1.72;
+  margin: 0 auto;
+  max-width: var(--reader-measure, 68ch);
+  font-size: var(--reader-font-size, 18px);
+  line-height: var(--reader-line-height, 1.7);
   letter-spacing: 0.002em;
+}
+.reader-prose[data-typeface="serif"],
+.reader-prose[data-typeface="serif"] .reader-md {
+  font-family: var(--font-serif), Georgia, "Times New Roman", serif;
+}
+.reader-prose[data-typeface="sans"],
+.reader-prose[data-typeface="sans"] .reader-md {
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
 .reader-prose ::selection {
   background: var(--reader-selection);
+}
+
+/* Top toolbar: progress line + appearance/contents controls + % read. */
+.reader-toolbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--reader-rule);
+  background: var(--reader-bg);
+  color: var(--reader-ink);
+}
+.reader-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: transparent;
+}
+.reader-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #22d3ee, #a855f7);
+  transition: width 90ms linear;
+}
+.reader-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--reader-muted);
+  transition: background 120ms ease, color 120ms ease;
+}
+.reader-tool-btn:hover {
+  color: var(--reader-ink);
+  background: color-mix(in srgb, var(--reader-ink) 8%, transparent);
+}
+.reader-pct {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--reader-muted);
+}
+
+/* Article hero: source · title · meta over a soft blurred gradient. */
+.reader-hero {
+  position: relative;
+  padding: 28px 0 18px;
+  margin-bottom: 6px;
+  isolation: isolate;
+}
+.reader-hero-blur {
+  position: absolute;
+  inset: -40px -20% 30%;
+  z-index: -1;
+  background:
+    radial-gradient(60% 80% at 30% 0%, color-mix(in srgb, var(--reader-accent) 28%, transparent), transparent 70%),
+    radial-gradient(50% 70% at 85% 10%, rgba(168, 85, 247, 0.22), transparent 70%);
+  filter: blur(46px);
+  opacity: 0.7;
+  pointer-events: none;
+}
+.reader-hero-source {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--reader-muted);
+}
+.reader-hero-title {
+  margin: 8px 0 10px;
+  font-size: 2em;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  color: var(--reader-heading);
+}
+.reader-hero-meta {
+  font-size: 0.82em;
+  color: var(--reader-muted);
+}
+.reader-hero-rule {
+  margin: 18px auto 0;
+  width: 38px;
+  border: none;
+  border-top: 2px solid var(--reader-rule);
+}
+
+/* AI summary card ("Summarized by Ghostreader"). */
+.reader-summary {
+  margin: 0 0 26px;
+  padding: 14px 16px;
+  border: 1px solid var(--reader-rule);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--reader-accent) 6%, transparent);
+}
+.reader-summary-body {
+  font-size: 0.95em;
+  line-height: 1.55;
+  color: var(--reader-ink);
+}
+.reader-summary-label {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--reader-muted);
+}
+
+/* Table of contents slide-over. */
+.reader-toc {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+}
+.reader-toc-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.28);
+}
+.reader-toc-panel {
+  position: relative;
+  width: min(320px, 82%);
+  height: 100%;
+  overflow-y: auto;
+  padding: 16px 14px;
+  background: var(--reader-bg);
+  border-right: 1px solid var(--reader-rule);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+.reader-toc-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 7px 8px;
+  border-radius: 7px;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--reader-muted);
+  transition: background 120ms ease, color 120ms ease;
+}
+.reader-toc-item:hover {
+  color: var(--reader-ink);
+  background: color-mix(in srgb, var(--reader-ink) 7%, transparent);
+}
+.reader-toc-item[data-active="true"] {
+  color: var(--reader-accent);
+  font-weight: 600;
 }
 .reader-para {
   margin: 0 0 1.05em 0;
@@ -443,8 +622,7 @@ html[data-platform="win32"] .tab-bar {
 .reader-md li { margin: 0.25em 0; }
 .reader-md li > ul,
 .reader-md li > ol { margin: 0.25em 0; }
-.reader-md a { color: var(--accent-600); text-decoration: underline; }
-.reader-surface.dark .reader-md a { color: #a5b4fc; }
+.reader-md a { color: var(--reader-accent); text-decoration: underline; text-underline-offset: 2px; }
 .reader-md code {
   font-family: var(--font-geist-mono), ui-monospace, monospace;
   font-size: 0.88em;
@@ -464,8 +642,9 @@ html[data-platform="win32"] .tab-bar {
 .reader-md blockquote {
   margin: 0 0 1.1em;
   padding-left: 1em;
-  border-left: 3px solid var(--reader-rule);
-  color: var(--reader-muted);
+  border-left: 3px solid var(--reader-accent);
+  font-style: italic;
+  color: var(--reader-ink);
 }
 .reader-md img { max-width: 100%; height: auto; border-radius: 8px; }
 .reader-md table { border-collapse: collapse; margin: 0 0 1.1em; font-size: 0.95em; }

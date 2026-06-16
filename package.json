@@ -24,6 +24,7 @@
     "test:local-models": "tsx scripts/test-local-models.ts",
     "test:projects": "tsx scripts/test-projects.ts",
     "test:reader": "tsx scripts/test-reader-reflow.ts",
+    "test:reader-prefs": "tsx scripts/test-reader-prefs.ts",
     "smoke": "node scripts/smoke-test.mjs",
     "smoke-all": "node scripts/full-test.mjs",
     "build-writeup": "node scripts/build-pdf.mjs",
