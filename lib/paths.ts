@@ -105,6 +105,11 @@ export function tagsPath(docId: string): string {
   return path.join(docDir(docId), "tags.json");
 }
 
+/** Cached Reader document summary (the "Summarized by Ghostreader" card). */
+export function summaryPath(docId: string): string {
+  return path.join(docDir(docId), "summary.json");
+}
+
 export function ensureDocDir(docId: string): void {
   fs.mkdirSync(docDir(docId), { recursive: true });
 }

@@ -10,14 +10,13 @@ import {
   Upload,
   BookOpen,
   BookOpenText,
-  Moon,
-  Sun,
   Tag as TagIcon,
   Network,
 } from "lucide-react";
 
 import PdfViewer, { type Tag } from "@/components/PdfViewer";
-import ReaderView, { type ReaderTheme } from "@/components/ReaderView";
+import ReaderView from "@/components/ReaderView";
+import { loadReaderPrefs, saveReaderPrefs, type ReaderPrefs } from "@/lib/reader-prefs";
 import GhostReader, { type GhostSelection } from "@/components/GhostReader";
 import RightPane, { type RightPaneMode } from "@/components/RightPane";
 import AccountButton from "@/components/AccountButton";
@@ -126,20 +125,13 @@ export default function ViewerClient({ docId }: { docId: string }) {
     }
   }, [docId, docView]);
 
-  // Reader light/dark theme — a reading preference, persisted across docs.
-  const [readerTheme, setReaderTheme] = useState<ReaderTheme>(() => {
-    if (typeof window === "undefined") return "light";
-    const saved = window.localStorage.getItem("getit:reader-theme");
-    if (saved === "light" || saved === "dark") return saved;
-    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  });
-  useEffect(() => {
-    try {
-      window.localStorage.setItem("getit:reader-theme", readerTheme);
-    } catch {
-      /* noop */
-    }
-  }, [readerTheme]);
+  // Reader appearance prefs (theme / typeface / size / spacing / width) —
+  // global reading preferences, persisted across docs.
+  const [readerPrefs, setReaderPrefs] = useState<ReaderPrefs>(() => loadReaderPrefs());
+  const updateReaderPrefs = useCallback((p: ReaderPrefs) => {
+    setReaderPrefs(p);
+    saveReaderPrefs(p);
+  }, []);
 
   // Signature of the active provider/model/key; used to re-run generation
   // only when the AI backend actually changes (not on every settings save).
@@ -534,8 +526,9 @@ export default function ViewerClient({ docId }: { docId: string }) {
 
       <div className="flex min-h-0 flex-1 gap-2 bg-[var(--surface-canvas)] p-2">
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-white">
-          {/* Surface toggle: Reader (default) ⇄ PDF, plus reader theme. */}
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--border-subtle)] px-2 py-1.5">
+          {/* Surface toggle: Reader (default) ⇄ PDF. Reader theme/typography
+              live in the Reader's own "Aa" appearance panel. */}
+          <div className="flex shrink-0 items-center gap-2 border-b border-[var(--border-subtle)] px-2 py-1.5">
             <div className="flex items-center gap-0.5 rounded-lg bg-[var(--surface-sunken)] p-0.5">
               <SurfaceTab active={docView === "reader"} onClick={() => setDocView("reader")} Icon={BookOpenText}>
                 Reader
@@ -544,16 +537,6 @@ export default function ViewerClient({ docId }: { docId: string }) {
                 PDF
               </SurfaceTab>
             </div>
-            {docView === "reader" && (
-              <button
-                type="button"
-                onClick={() => setReaderTheme((t) => (t === "dark" ? "light" : "dark"))}
-                title={readerTheme === "dark" ? "Switch to light" : "Switch to dark"}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--ink-500)] hover:bg-[var(--surface-sunken)] hover:text-[var(--ink-900)]"
-              >
-                {readerTheme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
-              </button>
-            )}
           </div>
 
           <div className="relative min-h-0 flex-1">
@@ -561,7 +544,9 @@ export default function ViewerClient({ docId }: { docId: string }) {
               <ReaderView
                 docId={docId}
                 pdfUrl={meta.pdfUrl}
-                theme={readerTheme}
+                title={docTitle || meta.filename}
+                prefs={readerPrefs}
+                onPrefsChange={updateReaderPrefs}
                 onTextSelect={setGhost}
               />
             ) : (

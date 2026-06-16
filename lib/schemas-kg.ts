@@ -127,6 +127,19 @@ export const ghostReaderSchema = {
 
 export type GhostReaderResult = { answer: string };
 
+// ── Document summary: the Reader's "Summarized by Ghostreader" card ─────
+
+export const docSummarySchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["summary"],
+  properties: {
+    summary: { type: "string", minLength: 20, maxLength: 1200 },
+  },
+} as const;
+
+export type DocSummaryResult = { summary: string };
+
 export type ChatReplyResult = { reply: string };
 
 // ── Flashcards: deck generation ────────────────────────────────────────
