@@ -12,8 +12,8 @@
  * parallel writes could race the JSON file.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, FileText, Loader2, Search, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Check, FileText, Loader2, Search, Upload, X } from "lucide-react";
 
 type LibRow = {
   id: string;
@@ -40,6 +40,9 @@ export default function AddDocsModal({
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   // Tracks docs whose membership we mutated locally (so the list reflects it
   // without a full refetch). Maps docId -> projectId|null.
   const [localMembership, setLocalMembership] = useState<Record<string, string | null>>({});
@@ -128,6 +131,40 @@ export default function AddDocsModal({
     onChanged();
   };
 
+  // Upload new files straight into the project (so users don't have to detour
+  // through the Library). Each file goes through the normal /api/upload path,
+  // then is filed into this project. Sequential to avoid racing the docs index.
+  const onUploadFiles = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    setUploading(true);
+    setUploadError(null);
+    let lastError: string | null = null;
+    for (const file of Array.from(fileList)) {
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        const up = await fetch("/api/upload", { method: "POST", body: fd });
+        const uj = await up.json().catch(() => ({}));
+        if (!up.ok || !uj.docId) {
+          lastError = uj.error || `Couldn't upload ${file.name}`;
+          continue;
+        }
+        await fetch(`/api/projects/${projectId}/docs`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ docId: uj.docId, action: "add" }),
+        });
+      } catch {
+        lastError = `Couldn't upload ${file.name}`;
+      }
+    }
+    if (lastError) setUploadError(lastError);
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    await refetch();
+    onChanged();
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4"
@@ -150,16 +187,37 @@ export default function AddDocsModal({
         </div>
 
         <div className="border-b border-[var(--border-subtle)] px-5 py-3">
-          <div className="flex items-center gap-2 rounded-lg border border-[var(--border-default)] bg-white px-2.5">
-            <Search className="h-3.5 w-3.5 shrink-0 text-[var(--ink-400)]" />
+          <div className="flex items-center gap-2">
+            <div className="flex flex-1 items-center gap-2 rounded-lg border border-[var(--border-default)] bg-white px-2.5">
+              <Search className="h-3.5 w-3.5 shrink-0 text-[var(--ink-400)]" />
+              <input
+                value={query}
+                autoFocus
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search your library…"
+                className="h-9 min-w-0 flex-1 bg-transparent text-[13px] text-[var(--ink-900)] focus:outline-none"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              title="Upload files straight into this project"
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 text-[13px] font-medium text-[var(--ink-700)] hover:border-[var(--border-strong)] disabled:opacity-50"
+            >
+              {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+              Upload
+            </button>
             <input
-              value={query}
-              autoFocus
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search your library…"
-              className="h-9 min-w-0 flex-1 bg-transparent text-[13px] text-[var(--ink-900)] focus:outline-none"
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".pdf,.txt,.md,.markdown"
+              className="hidden"
+              onChange={(e) => onUploadFiles(e.target.files)}
             />
           </div>
+          {uploadError && <p className="mt-2 text-[11.5px] text-rose-600">{uploadError}</p>}
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">

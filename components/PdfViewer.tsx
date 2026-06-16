@@ -463,8 +463,11 @@ function PdfPage({
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
       {/* Selectable text layer (invisible) for the ghostreader. */}
       <div ref={textLayerRef} className="textLayer" />
-      {/* Tag overlay layer */}
-      <div className="pointer-events-none absolute inset-0">
+      {/* Tag overlay layer — must sit ABOVE the text layer (z-index:1) or the
+          invisible selectable spans intercept clicks meant for the pills
+          (the "had to click 3-5 times" bug). The container is pointer-events-
+          none so text between pills still selects through to the layer below. */}
+      <div className="pointer-events-none absolute inset-0 z-20">
         {tags.map((t) => (
           <TagPill
             key={t.id}
