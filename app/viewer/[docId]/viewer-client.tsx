@@ -12,6 +12,10 @@ import {
   BookOpenText,
   Tag as TagIcon,
   Network,
+  Maximize2,
+  Minimize2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 import PdfViewer, { type Tag } from "@/components/PdfViewer";
@@ -152,6 +156,10 @@ export default function ViewerClient({ docId }: { docId: string }) {
   const [autoVizBudget, setAutoVizBudget] = useState<number>(0);
   const analysisStartedRef = useRef(false);
   const kickedVizRef = useRef<Set<string>>(new Set());
+
+  // Focused reading mode — hides the visualizer pane so the reader takes the
+  // full width (distraction-free). User-toggled, off by default.
+  const [focused, setFocused] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -531,6 +539,19 @@ export default function ViewerClient({ docId }: { docId: string }) {
   const activeTag = tags.find((t) => t.id === activeTagId) ?? null;
   const activeSpec = activeTag?.spec ?? null;
 
+  // Step through ready visualizations from the reader side (prev/next), so the
+  // user can move through them without hunting for each tag in the text.
+  const readyVizTags = tags.filter((t) => t.ready && t.spec);
+  const readyIndex = readyVizTags.findIndex((t) => t.id === activeTagId);
+  const stepViz = (dir: 1 | -1) => {
+    if (readyVizTags.length === 0) return;
+    const base = readyIndex < 0 ? (dir === 1 ? -1 : 0) : readyIndex;
+    const next = (base + dir + readyVizTags.length) % readyVizTags.length;
+    setActiveTagId(readyVizTags[next].id);
+    setRightPaneMode("visualizer");
+    if (focused) setFocused(false); // reveal the pane so the stepped viz is visible
+  };
+
   const truncated =
     docTitle && docTitle.length > 28
       ? `${docTitle.slice(0, 28)}…`
@@ -599,6 +620,44 @@ export default function ViewerClient({ docId }: { docId: string }) {
                 PDF
               </SurfaceTab>
             </div>
+            <div className="ml-auto flex items-center gap-1">
+              {readyVizTags.length > 1 && (
+                <div className="mr-1 flex items-center gap-0.5 text-[var(--ink-500)]">
+                  <button
+                    type="button"
+                    onClick={() => stepViz(-1)}
+                    aria-label="Previous visualization"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[var(--surface-sunken)] hover:text-[var(--ink-900)]"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <span className="min-w-[44px] text-center text-[11px] tabular-nums">
+                    {readyIndex >= 0 ? readyIndex + 1 : "–"}/{readyVizTags.length} viz
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => stepViz(1)}
+                    aria-label="Next visualization"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[var(--surface-sunken)] hover:text-[var(--ink-900)]"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setFocused((v) => !v)}
+                title={focused ? "Exit focused reading" : "Focused reading (hide visualizer)"}
+                className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition ${
+                  focused
+                    ? "bg-[var(--accent-50)] text-[var(--accent-700)]"
+                    : "text-[var(--ink-500)] hover:bg-[var(--surface-sunken)] hover:text-[var(--ink-900)]"
+                }`}
+              >
+                {focused ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+                {focused ? "Exit focus" : "Focus"}
+              </button>
+            </div>
           </div>
 
           <div className="relative min-h-0 flex-1">
@@ -633,7 +692,12 @@ export default function ViewerClient({ docId }: { docId: string }) {
             />
           )}
         </div>
-        <div className="flex w-[44%] min-w-[420px] max-w-[720px] flex-col overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-white">
+        <div
+          className={`flex flex-col overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-white transition-all duration-300 ${
+            focused ? "pointer-events-none w-0 min-w-0 max-w-0 border-0 opacity-0" : "w-[44%] min-w-[420px] max-w-[720px]"
+          }`}
+          aria-hidden={focused}
+        >
           <RightPane
             docId={docId}
             mode={rightPaneMode}
