@@ -24,6 +24,7 @@ import {
   Layers,
   ListChecks,
   Network,
+  ListTree,
   Lightbulb,
   ChevronDown,
   MoreHorizontal,
@@ -46,6 +47,7 @@ import {
 } from "@/components/Visualizer/viz-meta";
 
 import KnowledgeGraphView from "./KnowledgeGraphView";
+import MindMapView from "./MindMapView";
 import ChatView from "./ChatView";
 import FlashcardsView from "./FlashcardsView";
 import QuizzesView from "./QuizzesView";
@@ -54,6 +56,7 @@ import FeynmanView from "./FeynmanView";
 export type RightPaneMode =
   | "visualizer"
   | "graph"
+  | "mindmap"
   | "chat"
   | "flashcards"
   | "quizzes"
@@ -76,6 +79,12 @@ const MODES: Array<{
     label: "Knowledge Graph",
     Icon: Network,
     description: "Map of concepts with live mastery scores",
+  },
+  {
+    id: "mindmap",
+    label: "Mind map",
+    Icon: ListTree,
+    description: "Expandable hierarchical map of the document's concepts",
   },
   {
     id: "chat",
@@ -156,6 +165,7 @@ export default function RightPane({ docId, mode, onModeChange, visualizer }: Pro
             }}
           />
         )}
+        {mode === "mindmap" && <MindMapView docId={docId} />}
         {mode === "chat" && <ChatView docId={docId} />}
         {mode === "flashcards" && <FlashcardsView docId={docId} />}
         {mode === "quizzes" && <QuizzesView docId={docId} />}

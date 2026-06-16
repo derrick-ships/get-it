@@ -211,8 +211,10 @@ export default function ViewerClient({ docId }: { docId: string }) {
     if (
       v === "visualizer" ||
       v === "graph" ||
+      v === "mindmap" ||
       v === "chat" ||
       v === "flashcards" ||
+      v === "quizzes" ||
       v === "feynman"
     ) {
       return v;
