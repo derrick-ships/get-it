@@ -30,6 +30,36 @@ import {
 } from "@/lib/reader-prefs";
 import ReaderAppearance from "@/components/reader/ReaderAppearance";
 import ReaderContents, { type TocItem } from "@/components/reader/ReaderContents";
+import { HIGHLIGHT_EVENT } from "@/components/GhostReader";
+
+/** Wrap the first single-text-node occurrence of each saved highlight in a
+ *  <mark> so it stays visibly highlighted across reloads. Single-node matches
+ *  cover the common case (a sentence within one reflowed paragraph). */
+function markHighlights(container: HTMLElement, texts: string[]) {
+  for (const raw of texts) {
+    const needle = raw.trim();
+    if (needle.length < 4) continue;
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      const el = (node as Text).parentElement;
+      if (!el || el.closest("mark.reader-highlight")) continue;
+      const idx = (node.textContent ?? "").indexOf(needle);
+      if (idx < 0) continue;
+      try {
+        const range = document.createRange();
+        range.setStart(node, idx);
+        range.setEnd(node, idx + needle.length);
+        const mark = document.createElement("mark");
+        mark.className = "reader-highlight";
+        range.surroundContents(mark);
+      } catch {
+        /* spans multiple nodes — skip */
+      }
+      break;
+    }
+  }
+}
 
 if (typeof window !== "undefined") {
   GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
@@ -423,6 +453,31 @@ export default function ReaderView({
       cancelled = true;
     };
   }, [docId]);
+
+  // ── Saved highlights — fetch + re-mark in the prose ──
+  const [highlightTexts, setHighlightTexts] = useState<string[]>([]);
+  const fetchHighlights = useCallback(() => {
+    fetch(`/api/highlights/${docId}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { highlights: [] }))
+      .then((j: { highlights?: { text: string }[] }) =>
+        setHighlightTexts((j.highlights ?? []).map((h) => h.text)),
+      )
+      .catch(() => {});
+  }, [docId]);
+  useEffect(() => {
+    fetchHighlights();
+    const onAdded = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { docId?: string } | undefined;
+      if (!detail || detail.docId === docId) fetchHighlights();
+    };
+    window.addEventListener(HIGHLIGHT_EVENT, onAdded);
+    return () => window.removeEventListener(HIGHLIGHT_EVENT, onAdded);
+  }, [docId, fetchHighlights]);
+  useEffect(() => {
+    const c = containerRef.current;
+    if (!c || !data || highlightTexts.length === 0) return;
+    markHighlights(c, highlightTexts);
+  }, [data, pdfPages, highlightTexts]);
 
   // ── Panels ──
   const [showAppearance, setShowAppearance] = useState(false);

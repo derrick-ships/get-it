@@ -429,6 +429,18 @@ html[data-platform="win32"] .tab-bar {
 .reader-prose ::selection {
   background: var(--reader-selection);
 }
+/* Persisted highlights re-marked in the prose. */
+.reader-highlight {
+  background: color-mix(in srgb, #fde047 55%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0.05em 0.02em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.reader-root.dark .reader-highlight {
+  background: color-mix(in srgb, #facc15 32%, transparent);
+}
 
 /* Top toolbar: progress line + appearance/contents controls + % read. */
 .reader-toolbar {
