@@ -138,8 +138,6 @@ async function runDetection(docId: string) {
   const doc = getDoc(docId);
   if (!doc) return;
   ensureTagsFile(docId);
-  const settings = loadSettings();
-  const autoGenerate = settings.autoGenerate;
 
   const inFlightPages = new Set<number>();
   // Per-page generic-failure counter (a backend Codex error doesn't count). A
@@ -189,7 +187,7 @@ async function runDetection(docId: string) {
         }
         for (const p of batch) inFlightPages.add(p);
         active++;
-        analyzeBatch(docId, batch, autoGenerate)
+        analyzeBatch(docId, batch)
           .catch((e) => {
             if (e instanceof CodexError && e.kind !== "generic") {
               // Account-level error (rate-limit / auth / binary / unsupported
@@ -208,7 +206,7 @@ async function runDetection(docId: string) {
                 const n = (attempts.get(p) ?? 0) + 1;
                 attempts.set(p, n);
                 if (n >= MAX_DETECTION_ATTEMPTS) {
-                  appendDetectionResult(docId, p, [], autoGenerate);
+                  appendDetectionResult(docId, p, []);
                 }
               }
             }
@@ -246,7 +244,6 @@ async function runDetection(docId: string) {
 async function analyzeBatch(
   docId: string,
   pageIndices: number[],
-  autoGenerate: boolean,
 ) {
   const doc = getDoc(docId);
   if (!doc) return;
@@ -256,7 +253,7 @@ async function analyzeBatch(
     const page = doc.extracted.pages[idx];
     if (!page || page.text.length < MIN_PAGE_TEXT_LEN) {
       // Out of range or too short to be worth a model call — mark analyzed.
-      appendDetectionResult(docId, idx, [], autoGenerate);
+      appendDetectionResult(docId, idx, []);
     } else {
       rich.push({ pageIndex: idx, text: page.text });
     }
@@ -293,12 +290,15 @@ async function analyzeBatch(
           type: c.type as VizType,
           label: c.label,
           ready: false,
-          generating: autoGenerate,
+          // Detection no longer auto-starts visualization. The client drives
+          // generation within the user's pre-flight budget (so a 40-page doc
+          // can't silently spawn 64 viz calls). Tags start idle + clickable.
+          generating: false,
           concept: c,
         };
       })
       .filter((t): t is PersistedTagServer => t !== null);
-    appendDetectionResult(docId, pageIndex, newTags, autoGenerate);
+    appendDetectionResult(docId, pageIndex, newTags);
   }
 }
 
@@ -306,13 +306,10 @@ function appendDetectionResult(
   docId: string,
   pageIndex: number,
   newTags: PersistedTagServer[],
-  autoGenerate: boolean,
 ) {
-  let added = 0;
   mergeTagsFile(docId, (file) => {
     const existingIds = new Set(file.tags.map((t) => t.id));
     const fresh = newTags.filter((t) => !existingIds.has(t.id));
-    added = fresh.length;
     const merged: PersistedTagsFile = {
       ...file,
       tags: [...file.tags, ...fresh],
@@ -320,7 +317,6 @@ function appendDetectionResult(
     };
     return merged;
   });
-  if (autoGenerate && added > 0) ensureVizQueue(docId);
 }
 
 // ── Viz queue ───────────────────────────────────────────────────────────

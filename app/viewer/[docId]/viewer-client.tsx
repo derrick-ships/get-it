@@ -18,6 +18,7 @@ import PdfViewer, { type Tag } from "@/components/PdfViewer";
 import ReaderView from "@/components/ReaderView";
 import { loadReaderPrefs, saveReaderPrefs, type ReaderPrefs } from "@/lib/reader-prefs";
 import GhostReader, { type GhostSelection } from "@/components/GhostReader";
+import PreflightGate from "@/components/PreflightGate";
 import RightPane, { type RightPaneMode } from "@/components/RightPane";
 import AccountButton from "@/components/AccountButton";
 import SettingsButton, { SETTINGS_EVENT } from "@/components/SettingsButton";
@@ -62,6 +63,7 @@ type TagsApiResponse = {
 type SettingsLike = {
   autoGenerate?: boolean;
   maxRetries?: number;
+  vizBudget?: number;
   provider?: string;
   codexModel?: string;
   openrouterModel?: string;
@@ -143,6 +145,14 @@ export default function ViewerClient({ docId }: { docId: string }) {
   const [autoGenerate, setAutoGenerate] = useState<boolean>(AUTO_GENERATE_VIZ);
   const [maxRetries, setMaxRetries] = useState<number>(MAX_VIZ_GEN_RETRIES);
 
+  // Pre-flight generation gate: nothing is analyzed/visualized until the user
+  // confirms a budget (so a long doc can't silently burn the usage window).
+  const [preflight, setPreflight] = useState<"checking" | "show" | "done">("checking");
+  const [defaultBudget, setDefaultBudget] = useState<number>(12);
+  const [autoVizBudget, setAutoVizBudget] = useState<number>(0);
+  const analysisStartedRef = useRef(false);
+  const kickedVizRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     let cancelled = false;
     fetch("/api/settings", { cache: "no-store" })
@@ -151,6 +161,7 @@ export default function ViewerClient({ docId }: { docId: string }) {
         if (cancelled) return;
         if (typeof s.autoGenerate === "boolean") setAutoGenerate(s.autoGenerate);
         if (typeof s.maxRetries === "number") setMaxRetries(s.maxRetries);
+        if (typeof s.vizBudget === "number") setDefaultBudget(s.vizBudget);
         providerSigRef.current = providerSig(s);
       })
       .catch(() => {});
@@ -253,8 +264,31 @@ export default function ViewerClient({ docId }: { docId: string }) {
     return () => flushChatEval(true);
   }, [flushChatEval]);
 
-  // ── Bootstrap: doc meta + bump lastOpenedAt + kick KG build + start
-  //    detection job + start polling. All idempotent server-side.
+  // Start the analysis agents (detection + knowledge graph) and set the
+  // auto-visualize budget. Kicked only once the user has passed the pre-flight
+  // gate (or on a doc that was already analyzed before). Idempotent server-side.
+  const startAnalysis = useCallback(
+    (budget: number) => {
+      if (!analysisStartedRef.current) {
+        analysisStartedRef.current = true;
+        void fetch(`/api/kg/${docId}/build`, { method: "POST" }).catch(() => {});
+        void fetch(`/api/jobs/detect/${docId}`, { method: "POST" }).catch(() => {});
+      }
+      setAutoVizBudget(budget);
+      setPreflight("done");
+      if (budget > 0) {
+        void fetch("/api/settings", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ vizBudget: budget }),
+        }).catch(() => {});
+      }
+    },
+    [docId],
+  );
+
+  // ── Bootstrap: doc meta + bump lastOpenedAt + start polling. Generation is
+  //    gated behind the pre-flight (see the fresh-check effect below).
   useEffect(() => {
     let cancelled = false;
     // Doc meta — without it the PdfViewer can't render.
@@ -277,14 +311,55 @@ export default function ViewerClient({ docId }: { docId: string }) {
       });
     // Touch (so library's "last opened" reflects this open).
     void fetch(`/api/doc/${docId}/touch`, { method: "POST" }).catch(() => {});
-    // Kick the KG build (idempotent — server skips if ready).
-    void fetch(`/api/kg/${docId}/build`, { method: "POST" }).catch(() => {});
-    // Kick the detection job (idempotent — server skips if running or done).
-    void fetch(`/api/jobs/detect/${docId}`, { method: "POST" }).catch(() => {});
     return () => {
       cancelled = true;
     };
   }, [docId]);
+
+  // ── Pre-flight decision ───────────────────────────────────────────────
+  // A doc that was already analyzed before (has tags / analyzed pages) resumes
+  // silently. A fresh doc shows the budget gate; nothing is generated until the
+  // user chooses. One check, after meta loads.
+  useEffect(() => {
+    if (!meta) return;
+    let cancelled = false;
+    fetch(`/api/tags/${docId}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: TagsApiResponse | null) => {
+        if (cancelled) return;
+        const f = data?.file;
+        const started = !!f && ((f.pagesAnalyzed?.length ?? 0) > 0 || (f.tags?.length ?? 0) > 0);
+        if (started) startAnalysis(0); // resume — don't auto-spend on new viz
+        else setPreflight("show");
+      })
+      .catch(() => {
+        if (!cancelled) setPreflight("show");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [meta, docId, startAnalysis]);
+
+  // ── Auto-visualize within the budget ──────────────────────────────────
+  // After consent, kick viz for idle tags up to the chosen budget (counting any
+  // already generating/ready). kickedVizRef dedupes across polls.
+  useEffect(() => {
+    if (autoVizBudget <= 0) return;
+    const active = tags.filter((t) => t.generating || t.ready || t.spec).length;
+    let slots = autoVizBudget - active;
+    if (slots <= 0) return;
+    for (const t of tags) {
+      if (slots <= 0) break;
+      if (t.spec || t.error || t.generating || kickedVizRef.current.has(t.id)) continue;
+      kickedVizRef.current.add(t.id);
+      slots--;
+      void fetch(`/api/jobs/viz/${docId}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ tagId: t.id }),
+      }).catch(() => {});
+    }
+  }, [tags, autoVizBudget, docId]);
 
   // ── Polling loop ─────────────────────────────────────────────────────
   //
@@ -419,30 +494,9 @@ export default function ViewerClient({ docId }: { docId: string }) {
     [docId],
   );
 
-  // When auto-generate flips off → on mid-session, ask the server to
-  // queue every still-idle tag so the right pane fills in without the
-  // user clicking each one. The server-side detection job already
-  // does this for *new* tags it discovers; this catches tags that were
-  // detected before the toggle.
-  const prevAutoRef = useRef(autoGenerate);
-  useEffect(() => {
-    if (!prevAutoRef.current && autoGenerate) {
-      const idle = tags.filter(
-        (t) => !t.spec && !t.error && !t.generating,
-      );
-      for (const t of idle) {
-        void fetch(`/api/jobs/viz/${docId}`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ tagId: t.id }),
-        }).catch(() => {});
-      }
-    }
-    prevAutoRef.current = autoGenerate;
-    // tags intentionally excluded — we only want to fire on the toggle
-    // transition itself, not every state update.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoGenerate, docId]);
+  // (Auto-visualization is now governed by the pre-flight budget effect above,
+  // which caps how many tags generate — replacing the old "generate every idle
+  // tag" behavior that could spawn dozens of viz calls unprompted.)
 
   if (loadError) {
     return (
@@ -483,7 +537,15 @@ export default function ViewerClient({ docId }: { docId: string }) {
       : docTitle ?? meta.filename;
 
   return (
-    <div className="flex flex-1 min-h-0 flex-col bg-[var(--surface-canvas)]">
+    <div className="relative flex flex-1 min-h-0 flex-col bg-[var(--surface-canvas)]">
+      {preflight === "show" && (
+        <PreflightGate
+          numPages={meta.numPages}
+          defaultBudget={defaultBudget}
+          onConfirm={(n) => startAnalysis(n)}
+          onSkip={() => startAnalysis(0)}
+        />
+      )}
       {/* Top tab bar — Upload + Library pinned on the left, then the
           open-document tab (acts as the active "window"). Clicking
           Upload or Library navigates away, closing this doc tab. */}
